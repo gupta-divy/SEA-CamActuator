@@ -9,18 +9,20 @@ import csv
 import odrive
 from odrive.enums import ControlMode, InputMode, AxisState
 
-def setMotorConfiguration():
-    # set motor torque constant odrv0.axis0.motor.config.torque_constant = Kt = 0.13
-    # set to use reference frame to be relative
+def setMotorConfiguration(odrv: odrive.Odrive):
+    '''Set configurable variables on ODrive reading from config file'''
+    # No config file yet so writing important ones for now - 05/01/2025
+    odrv.axis0.motor.config.torque_constant = 0.13
+    odrv.axis0.controller.config.absolute_setpoints = False
     # set external encoder to be used for motor and inbuilt encoder for CAM angle
     # set controller configuration for different methods
-    # see, if you wanna use gain scheduling 
-    pass
+    # see, if we wanna use gain scheduling
 
 def isMotorConfigurationValid():
-    # odrv0.axis0.motor.config.torque_constant = Kt = 0.13 Nm/A
-    # motor.axis0.controller.config.absolute_setpoints = False
-    pass
+    '''Validate ODrive configurable variable match with tested values in config file'''
+    # Variables do not get overwritten on Odrive so that's why no need to set configuration everytime
+    # Need to test and write a config file
+    False
 
 class Config:
     control_loop_freq = 200
@@ -259,8 +261,8 @@ class SpringActuator_ODrive:
             raise RuntimeError('Calibration Failed') 
 
     def close(self):
-        self.odrv.axis0.AxisState = AxisState.IDLE 
-        self.close_file()       
+        self.odrv.axis0.AxisState = AxisState.IDLE
+        self.close_file()
 
 def connect_to_actuator(dataFile_name: str):
     '''Connect to Actuator, instantiate Actuator object'''
