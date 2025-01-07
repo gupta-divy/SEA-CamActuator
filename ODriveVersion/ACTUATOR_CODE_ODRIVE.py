@@ -41,9 +41,9 @@ class Constants:
     MOTOR_CURRENT_TO_MOTOR_TORQUE = 8.27 / MOTOR_KV             # From ODrive Manual, use with MotorCurrent in Amps
     MOTOR_TORQUE_CONSTANT = 0.13                                # Nm/A
     MS_TO_SECONDS = 0.001
-    default_KP = 300
-    default_KI = 350
-    default_KD = 0
+    default_KP = 300                                            # Motor Gains
+    default_KI = 350                                            # Motor Gains
+    default_KD = 0                                              # Motor Gains
     default_KVAL = 0                                            # Not changing from default
     default_BVAL = 0                                            # Not changing from default
     default_FF = 0
@@ -219,16 +219,15 @@ class SpringActuator_ODrive:
             '''Brings up slack, calibrates ankle and motor offset angles.'''
             input('Press Enter to calibrate exo on')
             print('Calibrating...')
-            init_cam_angle = self.read_data()
-            current_filter = filters.MovingAverage(window_size=10)
             cam_ang_filter = filters.MovingAverage(window_size=10)
             t0 = time.time()
             
             self.command_actuator_velocity(-1* self.motor_sign * self.config.calibrationVelocity)
             while time.time()-t0 < self.config.calibrationTime:
+                last_read_CAM_val = self.data.cam_angle
                 time.sleep(1/self.config.control_loop_freq)
                 self.read_data()
-                if(abs(cam_ang_filter(self.data.cam_angle)-init_cam_angle) < 1):
+                if(abs(cam_ang_filter(self.data.cam_angle)-last_read_CAM_val) < 1):
                     self.cam_offset = self.data.cam_angle
                     break
                 
@@ -239,7 +238,7 @@ class SpringActuator_ODrive:
             while time.time()-t0 < self.config.calibrationTime:
                 time.sleep(1/self.config.control_loop_freq)
                 self.read_data()
-                if(cam_ang_filter(self.data.cam_angle) > 1):
+                if(cam_ang_filter(self.data.cam_angle) > 5):
                     self.actuator_offset = self.data.actuator_angle
                     self.has_calibrated = True
                     break
@@ -268,9 +267,9 @@ def connect_to_actuator(dataFile_name: str):
     '''Connect to Actuator, instantiate Actuator object'''
     # Connection settings
     try:
-        odrv0: odrive.Odrive = odrive.find_any()
-        device_serial: str = hex(odrv0.serial_number).upper()
-        odrv0.axis0.AxisState = AxisState.CLOSED_LOOP_CONTROL
+        odrv: odrive.Odrive = odrive.find_any()
+        device_serial: str = hex(odrv.serial_number).upper()
+        odrv.axis0.AxisState = AxisState.CLOSED_LOOP_CONTROL
         print("Connected to Odrive: ", device_serial)
     except Exception as err:
         traceback.print_exc()
@@ -279,5 +278,5 @@ def connect_to_actuator(dataFile_name: str):
     if not isMotorConfigurationValid():
         setMotorConfiguration()
 
-    actuator = SpringActuator_ODrive(odrv0, dataFile_name, device_serial)
+    actuator = SpringActuator_ODrive(odrv, dataFile_name, device_serial)
     return actuator
