@@ -14,6 +14,9 @@ class ControllerConfigurationValues():
     TRAP_TRAJ_ACCEL_LIM = 2
     TRAP_TRAJ_DECCEL_LIM = 2
     TRAP_TRAJ_VEL_LIM = 100
+
+    # Reference Frame
+    USE_ABSOLUTE_MOTOR_ANGLE_FOR_SETPOINT = False
     
 
 class CoreConfigurationValues():
@@ -34,9 +37,6 @@ class CoreConfigurationValues():
     MAX_NEGATIVE_DC_CURRENT = -6
     MAX_DC_OVERVOLTAGE_TRIP_LEVEL = 24
     MIN_DC_OVERVOLTAGE_TRIP_LEVEL = 12
-
-    # Reference Frame
-    USE_ABSOLUTE_MOTOR_ANGLE_FOR_SETPOINT = False
 
 def setControllerConfiguration(odrv: odrive.Odrive):
     pass
@@ -75,9 +75,3 @@ def isOdriveConfigurationValid():
 if __name__ == "__main__":
     odrv = odrive.find_any()
     setCoreConfiguration(odrv)
-    
-    
-    
-
-
-
