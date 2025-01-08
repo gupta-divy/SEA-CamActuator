@@ -38,7 +38,7 @@ class CoreConfigurationValues():
     MAX_DC_OVERVOLTAGE_TRIP_LEVEL = 24
     MIN_DC_OVERVOLTAGE_TRIP_LEVEL = 12
 
-def setControllerConfiguration(odrv: odrive.Odrive):
+def setControllerConfiguration(odrv):
     '''Set controller values on ODrive reading from controller class'''
     control = ControllerConfigurationValues()
     odrv.axis0.controller.config.vel_ramp_rate = control.VEL_RAMP_RATE
@@ -49,7 +49,7 @@ def setControllerConfiguration(odrv: odrive.Odrive):
     odrv.axis0.controller.config.absolute_setpoints = control.USE_ABSOLUTE_MOTOR_ANGLE_FOR_SETPOINT    
     pass
 
-def setCoreConfiguration(odrv: odrive.Odrive):
+def setCoreConfiguration(odrv):
     '''Set configurable variables on ODrive reading from config class'''
     config = CoreConfigurationValues()
     odrv.axis0.config.motor.motor_type = config.MOTOR_TYPE
@@ -65,8 +65,8 @@ def setCoreConfiguration(odrv: odrive.Odrive):
     odrv.axis0.config.commutation_encoder = config.MOTOR_ENCODER
     odrv.rs485_encoder_group0.config.mode = config.MOTOR_ENCODER_MODEL
     
-    odrv.save_configuration()
-    odrv.reboot()
+    #odrv.save_configuration()
+    #odrv.reboot()
 
 def isOdriveConfigurationValid():
     '''Validate ODrive configurable variable match with tested values in config file'''
