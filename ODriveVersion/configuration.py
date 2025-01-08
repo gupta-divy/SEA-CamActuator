@@ -39,25 +39,28 @@ class CoreConfigurationValues():
     MIN_DC_OVERVOLTAGE_TRIP_LEVEL = 12
 
 def setControllerConfiguration(odrv: odrive.Odrive):
-   pass
+    '''Set controller values on ODrive reading from controller class'''
+    control = ControllerConfigurationValues()
+    odrv.axis0.controller.config.vel_ramp_rate = control.VEL_RAMP_RATE
+    odrv.axis0.controller.config.torque_ramp_rate = control.TORQUE_RAMP_RATE
+    odrv.axis0.trap_traj.config.accel_limit = control.TRAP_TRAJ_ACCEL_LIM
+    odrv.axis0.trap_traj.config.decel_limit = control.TRAP_TRAJ_DECCEL_LIM
+    odrv.axis0.trap_traj.config.vel_limit = control.TRAP_TRAJ_VEL_LIM
+    odrv.axis0.controller.config.absolute_setpoints = control.USE_ABSOLUTE_MOTOR_ANGLE_FOR_SETPOINT    
+    pass
 
 def setCoreConfiguration(odrv: odrive.Odrive):
     '''Set configurable variables on ODrive reading from config class'''
     config = CoreConfigurationValues()
-    control = ControllerConfigurationValues()
-    odrv.axis0.controller.config.absolute_setpoints = control.USE_ABSOLUTE_MOTOR_ANGLE_FOR_SETPOINT
     odrv.axis0.config.motor.motor_type = config.MOTOR_TYPE
     odrv.axis0.config.motor.pole_pairs = config.MOTOR_POLE_PAIRS
     odrv.axis0.config.motor.torque_constant = config.MOTOR_TORQUE_CONSTANT
     odrv.axis0.config.motor.current_soft_max = config.MOTOR_CURRENT_SOFT_MAX
     odrv.axis0.config.motor.calibration_current = config.MOTOR_CALIBRATION_CURRENT
-    odrv.axis0.config.motor.resistance_calib_max_voltage = 2
-    odrv.axis0.config.calibration_lockin.current = 10
     odrv.config.dc_bus_overvoltage_trip_level = config.MAX_DC_OVERVOLTAGE_TRIP_LEVEL
     odrv.config.dc_bus_undervoltage_trip_level = config.MIN_DC_OVERVOLTAGE_TRIP_LEVEL
     odrv.config.dc_max_positive_current = config.MAX_POSITIVE_DC_CURRENT
     odrv.config.dc_max_negative_current = config.MAX_NEGATIVE_DC_CURRENT
-
     odrv.axis0.config.load_encoder = config.MOTOR_ENCODER
     odrv.axis0.config.commutation_encoder = config.MOTOR_ENCODER
     odrv.rs485_encoder_group0.config.mode = config.MOTOR_ENCODER_MODEL
