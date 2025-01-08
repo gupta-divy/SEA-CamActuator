@@ -39,31 +39,28 @@ class CoreConfigurationValues():
     MIN_DC_OVERVOLTAGE_TRIP_LEVEL = 12
 
 def setControllerConfiguration(odrv: odrive.Odrive):
-    pass
+   pass
 
 def setCoreConfiguration(odrv: odrive.Odrive):
     '''Set configurable variables on ODrive reading from config class'''
     config = CoreConfigurationValues()
-    odrv.axis0.controller.config.absolute_setpoints = config.USE_ABSOLUTE_MOTOR_ANGLE_FOR_SETPOINT
-    odrv.axis0.config.motor.motor_type = MotorType.HIGH_CURRENT
-    odrv.axis0.config.motor.pole_pairs = 14
-    odrv.axis0.config.motor.torque_constant = 0.103375
-    odrv.axis0.config.motor.current_soft_max = 12
-    odrv.axis0.config.motor.current_hard_max = 25.6
-    odrv.axis0.config.motor.calibration_current = 5
+    control = ControllerConfigurationValues()
+    odrv.axis0.controller.config.absolute_setpoints = control.USE_ABSOLUTE_MOTOR_ANGLE_FOR_SETPOINT
+    odrv.axis0.config.motor.motor_type = config.MOTOR_TYPE
+    odrv.axis0.config.motor.pole_pairs = config.MOTOR_POLE_PAIRS
+    odrv.axis0.config.motor.torque_constant = config.MOTOR_TORQUE_CONSTANT
+    odrv.axis0.config.motor.current_soft_max = config.MOTOR_CURRENT_SOFT_MAX
+    odrv.axis0.config.motor.calibration_current = config.MOTOR_CALIBRATION_CURRENT
     odrv.axis0.config.motor.resistance_calib_max_voltage = 2
     odrv.axis0.config.calibration_lockin.current = 10
-    odrv.axis0.motor.motor_thermistor.config.enabled = False
-    odrv.axis0.config.torque_soft_min = -math.inf
-    odrv.axis0.config.torque_soft_max = math.inf
-    odrv.config.dc_bus_overvoltage_trip_level = 24
-    odrv.config.dc_bus_undervoltage_trip_level = 12
-    odrv.config.dc_max_positive_current = 6
-    odrv.config.dc_max_negative_current = -6
+    odrv.config.dc_bus_overvoltage_trip_level = config.MAX_DC_OVERVOLTAGE_TRIP_LEVEL
+    odrv.config.dc_bus_undervoltage_trip_level = config.MIN_DC_OVERVOLTAGE_TRIP_LEVEL
+    odrv.config.dc_max_positive_current = config.MAX_POSITIVE_DC_CURRENT
+    odrv.config.dc_max_negative_current = config.MAX_NEGATIVE_DC_CURRENT
 
-    odrv.axis0.config.load_encoder = EncoderId.RS485_ENCODER0
-    odrv.axis0.config.commutation_encoder = EncoderId.RS485_ENCODER0
-    odrv.rs485_encoder_group0.config.mode = Rs485EncoderMode.ODRIVE_OA1
+    odrv.axis0.config.load_encoder = config.MOTOR_ENCODER
+    odrv.axis0.config.commutation_encoder = config.MOTOR_ENCODER
+    odrv.rs485_encoder_group0.config.mode = config.MOTOR_ENCODER_MODEL
     
     odrv.save_configuration()
     odrv.reboot()
