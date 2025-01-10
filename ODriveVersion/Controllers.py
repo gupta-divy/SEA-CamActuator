@@ -5,8 +5,10 @@ import enum
 class SetpointType(enum):
     CABLE_FORCE = 0
     CAM_ANGLE = 1
-    VELOCITY = 2
-    HOME_POSITION = 3
+    ACTUATOR_VELOCITY = 2
+    ACTUATOR_ANGLE = 4
+    ACTUATOR_TORQUE = 5
+    HOME_POSITION = 6
     NONE = None
 
 class Controller(object):
@@ -36,7 +38,7 @@ class CommandSetpoint(Controller):
         if self.setpoint_type==SetpointType.CAM_ANGLE:
             self.actuator.command_cam_angle(self.setpoint_value,error_filter=self.butterfilter)
         
-        elif self.setpoint_type==SetpointType.VELOCITY:
+        elif self.setpoint_type==SetpointType.ACTUATOR_VELOCITY:
             self.actuator.command_actuator_velocity(self.setpoint_value, mode="ramp")
 
         elif self.setpoint_type==SetpointType.CABLE_FORCE:
@@ -50,6 +52,13 @@ class CommandSetpoint(Controller):
             self.actuator.command_cam_angle(0,error_filter=self.butterfilter)
             if(self.actuator.data.cam_angle < 3): 
                 self.tracking_status=True
+        
+        elif self.setpoint_type==SetpointType.ACTUATOR_ANGLE:
+            self.actuator.command_relative_actuator_angle(self.setpoint_value, mode="step")
+
+        elif self.setpoint_type==SetpointType.ACTUATOR_TORQUE:
+            self.actuator.command_actuator_torque(self.setpoint_value, mode="step")
+            
         else:
             pass
 
