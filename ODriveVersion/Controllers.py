@@ -27,11 +27,11 @@ class Controller(object):
         pass 
 
 class CommandSetpoint(Controller):
-    def __init__(self, actuator: SpringActuator_ODrive, setpoint_type: SetpointType = SetpointType.CAM_ANGLE, setpoint_value: float = 0):
+    def __init__(self, actuator: SpringActuator_ODrive):
         self.actuator = actuator
         self.butterfilter = filters.Butterworth(N=2,Wn=20,fs=200)
-        self.setpoint_type = setpoint_type
-        self.setpoint_value = setpoint_value
+        self.setpoint_type = SetpointType.CAM_ANGLE
+        self.setpoint_value = 5                        # default neutral angle
         self.tracking_status = False
 
     def command(self, reset=False):
@@ -65,7 +65,15 @@ class CommandSetpoint(Controller):
         return self.tracking_status
                     
     def update_controller_variables(self, setpoint_type, setpoint_value):
-        self.butterfilter.restart()
-        self.setpoint_type = setpoint_type
-        self.setpoint_value = setpoint_value
-        self.tracking_status = False
+        if self.check_input_safety(setpoint_type=setpoint_type, setpoint_val=setpoint_value):
+            self.butterfilter.restart()
+            self.setpoint_type = setpoint_type
+            self.setpoint_value = setpoint_value
+            self.tracking_status = False
+        else: 
+            print('Given setpoint may cause instability, so not updating')
+    
+    def check_input_safety(self,setpoint_type,setpoint_val):
+        ''' Check setpoint won't cause unstability in the system, for ex: from High torque to randomly cam_angle of 0.'''
+        # Needed to be added, for now relying on human intelligence
+        return True
