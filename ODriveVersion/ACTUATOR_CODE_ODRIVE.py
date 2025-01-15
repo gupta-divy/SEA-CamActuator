@@ -11,13 +11,15 @@ from odrive.enums import ControlMode, InputMode, AxisState
 import configuration
 
 class ControllerConfig:
-    control_loop_freq = 200
-    camControllerGainKp = 4
-    camControllerGainKd = 0.2
-    calibrationVelocity = 5         # deg / sec
-    calibrationTime = 5             # sec
-    calibrationEncNoiseLevel = 20   
-    calibrationCamThreshold = 5
+    control_loop_freq = 200             # hertz
+    camControllerGainKp = 2             
+    camControllerGainKd = 0.1           
+    calibrationVelocity = 15            # deg / sec
+    calibrationTime = 5                 # sec
+    calibrationEncNoiseLevel = 20       # counts
+    calibrationCamThreshold = 5         # deg
+    actuatorVelocitySaturation = 60     # deg / sec
+    actuatorTorqueSaturation = 3        # Nm 
 
 class Constants:
     MAX_ALLOWABLE_VOLTAGE_COMMAND = 3000                        # mV
@@ -26,8 +28,8 @@ class Constants:
     MOTOR_POS_EST_TO_ACTUATOR_DEG = 360 / MOTOR_TO_ACTUATOR_TR  # Deg / Revolution
     CAM_ENC_TO_DEG = 360 / 2**16                                # Deg / Encoder Bits
     MS_TO_SECONDS = 0.001
-    SPLINE_A_PTS_FORCE_ANGLE_CONVERSION = []
-    SPLINE_F_PTS_FORCE_ANGLE_CONVERSION = []
+    SPLINE_A_PTS_FORCE_ANGLE_CONVERSION = [0,10,20,40,70,80,85]
+    SPLINE_F_PTS_FORCE_ANGLE_CONVERSION = [2.15,2.2,2.275,2.4,6.5,9.5,11]
 
 class DesignConstants:
     'Actuator Design Constants, with measurements in mm and degrees with reference at CAM center'
@@ -49,7 +51,7 @@ class SpringActuator_ODrive:
         self.constants = Constants()
         self.design_constants = DesignConstants()
         self.config = ControllerConfig()
-        self.actuator_offset = None                    # post-calibration zero reference actuator angle
+        self.actuator_offset = None                 # post-calibration zero reference actuator angle
         self.cam_offset = None                      # post-calibration zero reference cam angle
         self.has_calibrated = False
         self.dataFile_name = dataFile_name
@@ -158,6 +160,9 @@ class SpringActuator_ODrive:
         
         if(self.odrv.axis0.controller.input_mode != des_input_mode):
             self.odrv.axis0.controller.config.input_mode = des_input_mode
+
+        # Velocity Saturation
+        des_velocity = max(des_velocity,self.config.actuatorVelocitySaturation)
         
         desired_motor_vel = des_velocity / self.constants.MOTOR_POS_EST_TO_ACTUATOR_DEG
         self.odrv.axis0.controller.input_vel = desired_motor_vel
@@ -178,6 +183,9 @@ class SpringActuator_ODrive:
         if(self.odrv.axis0.controller.input_mode != des_input_mode):
             self.odrv.axis0.controller.config.input_mode = des_input_mode
         
+        # Torque Saturation
+        des_torque = max(des_torque,self.config.actuatorTorqueSaturation)
+
         desired_motor_torque = des_torque / self.constants.MOTOR_TO_ACTUATOR_TR
         self.odrv.axis0.controller.input_torque = desired_motor_torque
 

@@ -9,7 +9,6 @@ from keyboard_interrupt_parser import ParameterParser
 datafile_name = input('Input the Filename, if not given data wont be logged: ')
 actuator = ACTUATOR_CODE_ODRIVE.connect_to_actuator(dataFile_name=datafile_name)
 actuator.intial_calibration()
-desired_angle = int(input('Enter the cam_angle you want the controller to track: '))
 print('Start!')
 
 # Setup controller
