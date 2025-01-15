@@ -1,18 +1,20 @@
 import ACTUATOR_CODE_ODRIVE
 import time
 import traceback
-from Controllers import CommandSetpoint, SetpointType
+import Controllers
+from Controllers import SetpointType
 import threading
 from keyboard_interrupt_parser import ParameterParser
 
 # Main Code
-datafile_name = input('Input the Filename, if not given data wont be logged: ')
+# datafile_name = input('Input the Filename, if not given data wont be logged: ')
+datafile_name = "test0"
 actuator = ACTUATOR_CODE_ODRIVE.connect_to_actuator(dataFile_name=datafile_name)
-actuator.intial_calibration()
+actuator.initial_calibration()
 print('Start!')
 
 # Setup controller
-actuator_controller = CommandSetpoint(actuator=actuator)
+actuator_controller = Controllers.CommandSetpoint(actuator)
 
 # Defining controller variables
 target_period = 1/actuator.config.control_loop_freq
@@ -44,7 +46,7 @@ while True:
         last_actuation_time = time_now
         loop_time = time_now - t0
         actuator.read_data(loop_time=loop_time)
-        actuator_controller.command()
+        # actuator_controller.command()
         actuator.write_data()
 
     except KeyboardInterrupt:

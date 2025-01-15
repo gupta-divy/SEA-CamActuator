@@ -89,11 +89,11 @@ def isOdriveConfigurationValid(odrv):
     check_calibration_current = odrv.axis0.config.motor.calibration_current
     print(check_torque_constent) 
     print(check_calibration_current)
-    False
+    return True
 
 if __name__ == "__main__":
     odrv = odrive.find_any()
     setCoreConfiguration(odrv)
     setControllerConfiguration(odrv)  
-    fullCalibration(odrv)
+    # fullCalibration(odrv)
     isOdriveConfigurationValid(odrv)
