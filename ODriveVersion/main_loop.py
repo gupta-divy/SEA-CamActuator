@@ -36,6 +36,7 @@ while True:
 
         lock.acquire()
         if new_setpoint_event.is_set():
+            print(f"Updating controller: type={keyboard_thread.setpoint_type}, value={keyboard_thread.setpoint_val}")
             actuator_controller.update_controller_variables(setpoint_type=keyboard_thread.setpoint_type,
                                                             setpoint_value=keyboard_thread.setpoint_val)
             new_setpoint_event.clear()
@@ -46,14 +47,15 @@ while True:
         last_actuation_time = time_now
         loop_time = time_now - t0
         actuator.read_data(loop_time=loop_time)
-        # actuator_controller.command()
+        actuator_controller.command()
         actuator.write_data()
 
     except KeyboardInterrupt:
         print('Ctrl-C detected, Getting Actuator to Home Position')
         actuator_controller.update_controller_variables(setpoint_type=SetpointType.HOME_POSITION, setpoint_value=0)
-        while(not actuator_controller.command()): time.sleep(target_period)
-        print("I'm Home, Now Existing Gracefully")
+        while not actuator_controller.command():
+            print("Commanding home position...")
+            time.sleep(target_period)
         break
 
     except Exception as err:

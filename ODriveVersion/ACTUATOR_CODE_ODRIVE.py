@@ -52,7 +52,7 @@ class SpringActuator_ODrive:
         self.design_constants = DesignConstants()
         self.config = ControllerConfig()
         self.actuator_offset = None                 # post-calibration zero reference actuator angle
-        self.cam_offset = None                      # post-calibration zero reference cam angle
+        self.cam_offset = 0                         # post-calibration zero reference cam angle
         self.has_calibrated = False
         self.dataFile_name = dataFile_name
         self.setup_data_writer(dataFile_name)
@@ -84,7 +84,7 @@ class SpringActuator_ODrive:
         commanded_exo_torque: float = None
 
         # Extra logged values for Debug
-        cam_angle_error: float = None
+        cam_angle_error: float = None              
         cam_angle_error_integral: float = None
 
     def read_data(self, loop_time=None):
@@ -131,10 +131,10 @@ class SpringActuator_ODrive:
         mode options: Step Input = step, 2nd Order Filtered = filt, Trapezoidal Velocity Profile = trap 
         '''
         # filt and trap can be configured, check Odrive InputMode API reference
-        des_input_mode = [InputMode.PASSTHROUGH if mode=="step" else 
+        des_input_mode = (InputMode.PASSTHROUGH if mode=="step" else 
                           InputMode.POS_FILTER if mode=="filt" else
                           InputMode.TRAP_TRAJ if mode=="trap" else
-                          InputMode.PASSTHROUGH]
+                          InputMode.PASSTHROUGH)
         
         if(self.odrv.axis0.controller.config.control_mode != ControlMode.POSITION_CONTROL):
             self.odrv.axis0.controller.config.control_mode = ControlMode.POSITION_CONTROL
@@ -173,9 +173,9 @@ class SpringActuator_ODrive:
         mode: setpoint method for torque controller,  DEFAULT = step_input
         mode options: Step Input = step, ramped torque to desired = ramp
         '''
-        des_input_mode = [InputMode.PASSTHROUGH if mode=="step" else 
+        des_input_mode = (InputMode.PASSTHROUGH if mode=="step" else 
                           InputMode.TORQUE_RAMP if mode=="ramp" else
-                          InputMode.PASSTHROUGH]
+                          InputMode.PASSTHROUGH)
         
         if(self.odrv.axis0.controller.config.control_mode != ControlMode.TORQUE_CONTROL):
             self.odrv.axis0.controller.config.control_mode = ControlMode.TORQUE_CONTROL
@@ -189,8 +189,10 @@ class SpringActuator_ODrive:
         desired_motor_torque = des_torque / self.constants.MOTOR_TO_ACTUATOR_TR
         self.odrv.axis0.controller.input_torque = desired_motor_torque
 
-    def command_cam_angle(self, des_angle: float, error_filter: filters.Filter):
+    def command_cam_angle(self, des_angle: float, error_filter: filters.Filter):  
         prev_cam_ang_err = self.data.cam_angle_error
+        if prev_cam_ang_err is None:
+            prev_cam_ang_err = 0.0
         curr_cam_ang_err = des_angle - self.data.cam_angle
         curr_cam_ang_err_diff = (curr_cam_ang_err - prev_cam_ang_err) * self.config.control_loop_freq
         curr_cam_ang_err_diff = error_filter.filter(curr_cam_ang_err_diff)
@@ -204,14 +206,15 @@ class SpringActuator_ODrive:
     
 # MECHANISM INITIAL CALIBRATION
 
-    def initial_calibration(self):
+    #def initial_calibration(self):
         while(True):
             time.sleep(1/self.config.control_loop_freq)
             self.read_data()
             print("Encoder value: ", self.data.cam_encoder_raw)
+            print("Cam Angle:", self.data.cam_angle)
             print("Motor Angle: ", self.data.actuator_angle)
 
-    # def intial_calibration(self):
+    def initial_calibration(self):
         try:
             '''Brings up slack, calibrates ankle and motor offset angles.'''
             input('Press Enter to calibrate exo on')
@@ -220,6 +223,7 @@ class SpringActuator_ODrive:
             t0 = time.time()
             
             self.command_actuator_velocity(-1* self.motor_sign * self.config.calibrationVelocity)
+            print("Actuator moving at velocity:", -1 * self.motor_sign * self.config.calibrationVelocity)
             while time.time()-t0 < self.config.calibrationTime:
                 last_read_CAM_val = self.data.cam_encoder_raw
                 time.sleep(1/self.config.control_loop_freq)
@@ -235,9 +239,9 @@ class SpringActuator_ODrive:
             while time.time()-t0 < self.config.calibrationTime:
                 time.sleep(1/self.config.control_loop_freq)
                 self.read_data()
-                print("Angle: ", self.data.cam_angle)
+                print("Angle: ", -1 * self.data.cam_angle)
                 print("Encoder: ", self.data.cam_encoder_raw)
-                if(cam_ang_filter.filter(self.data.cam_angle) > self.config.calibrationCamThreshold):
+                if(cam_ang_filter.filter(-1 * self.data.cam_angle) > self.config.calibrationCamThreshold):
                     self.actuator_offset = self.data.actuator_angle
                     self.has_calibrated = True
                     break
@@ -251,6 +255,7 @@ class SpringActuator_ODrive:
             print('CAM Offset: ', self.cam_offset)
             print('Motor offset: ', self.actuator_offset)        
             print('Finished Calibrating')
+            self.command_controller_off()
 
         except Exception as err:
             print(traceback.print_exc())
