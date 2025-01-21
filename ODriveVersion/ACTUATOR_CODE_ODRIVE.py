@@ -97,8 +97,8 @@ class SpringActuator_ODrive:
         self.data.actuator_angle = self.odrv.axis0.pos_estimate * self.constants.MOTOR_POS_EST_TO_ACTUATOR_DEG
         self.data.actuator_velocity = self.odrv.axis0.vel_estimate * self.constants.MOTOR_POS_EST_TO_ACTUATOR_DEG
         self.data.actuator_torque = self.odrv.axis0.motor.torque_estimate * self.constants.MOTOR_TO_ACTUATOR_TR
-        self.data.cam_encoder_raw = self.odrv.onboard_encoder0.raw
-        if(self.cam_offset!=None): self.data.cam_angle = (self.data.cam_encoder_raw - self.cam_offset) * self.constants.CAM_ENC_TO_DEG
+        self.data.cam_encoder_raw = self.odrv.onboard_encoder0.raw * self.constants.CAM_ENC_TO_DEG
+        if(self.cam_offset!=None): self.data.cam_angle = -1*(self.data.cam_encoder_raw - self.cam_offset)
         self.data.exo_angle_estimate = None             # Need to define helper function for this
         self.data.exo_velocity_estimate = None          # Need to define helper function for this
         self.data.exo_torque_estimate = None            # Need to define helper function for this
@@ -246,6 +246,7 @@ class SpringActuator_ODrive:
                     self.has_calibrated = True
                     break
             self.command_actuator_velocity(0)
+
 
             if not(self.has_calibrated):
                 raise RuntimeError('Calibration Timed Out!')
