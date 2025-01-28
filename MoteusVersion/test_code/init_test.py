@@ -68,6 +68,7 @@ async def main():
             print("Set Time: ", t1 - t0)
             print("Query Time: ", t2 - t1)
             print(data_feed)
+            print(data_feed.values)
 
 
             # Non-blocking sleep

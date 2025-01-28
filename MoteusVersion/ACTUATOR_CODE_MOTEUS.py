@@ -11,7 +11,7 @@ from moteus import multiplex as moteusMp
 from enum import Enum
 
 class moteusDataMap(Enum):
-    MODE = 10
+    MODE = 0
     POSITION = 1
     VELOCITY = 2
     TORQUE = 3
@@ -31,13 +31,14 @@ class ControllerConfig:
     calibrationTime = 5                 # sec
     calibrationEncNoiseLevel = 20       # counts
     calibrationCamThreshold = 5         # deg
-    actuatorVelocitySaturation = 60     # deg / sec
+    actuatorVelocitySaturation = 720     # deg / sec
     actuatorTorqueSaturation = 3        # Nm 
+    homeAngleThreshold = 3
 
 class Constants:
     MAX_ALLOWABLE_VOLTAGE_COMMAND = 3000                        # mV
     MAX_ALLOWABLE_CURRENT = 5000                                # mA
-    MOTOR_TO_ACTUATOR_TR = 8
+    MOTOR_TO_ACTUATOR_TR = 1
     MOTOR_POS_EST_TO_ACTUATOR_DEG = 360 / MOTOR_TO_ACTUATOR_TR  # Deg / Revolution / Transmission ratio
     CAM_ENC_TO_DEG = 360                                        # Deg / Revolution
     MS_TO_SECONDS = 0.001
@@ -121,20 +122,20 @@ class SpringActuator_moteus:
         data_feed = await self.motor_ctrl.custom_query(to_query)
         mc_data = data_feed.values
         self.data.loop_time = loop_time
-        self.data.mc_clock = mc_data[moteusDataMap.CONTROLLER_CLOCK]
-        self.data.mc_input_voltage = mc_data[moteusDataMap.VOLTAGE]
-        self.data.mc_power = mc_data[moteusDataMap.POWER]
-        self.data.mc_fault = mc_data[moteusDataMap.FAULT]
-        self.data.mc_temperature = mc_data[moteusDataMap.TEMPERATURE]
-        self.data.mc_mode = mc_data[moteusDataMap.MODE]
-        self.data.actuator_angle = mc_data[moteusDataMap.POSITION] * self.constants.MOTOR_POS_EST_TO_ACTUATOR_DEG
-        self.data.actuator_velocity = mc_data[moteusDataMap.VELOCITY] * self.constants.MOTOR_POS_EST_TO_ACTUATOR_DEG
-        self.data.actuator_torque = mc_data[moteusDataMap.TORQUE] * self.constants.MOTOR_TO_ACTUATOR_TR
+        self.data.mc_clock = mc_data[moteusDataMap.CONTROLLER_CLOCK.value]
+        self.data.mc_input_voltage = mc_data[moteusDataMap.VOLTAGE.value]
+        self.data.mc_power = mc_data[moteusDataMap.POWER.value]
+        self.data.mc_fault = mc_data[moteusDataMap.FAULT.value]
+        self.data.mc_temperature = mc_data[moteusDataMap.TEMPERATURE.value]
+        self.data.mc_mode = mc_data[moteusDataMap.MODE.value]
+        self.data.actuator_angle = mc_data[moteusDataMap.POSITION.value] * self.constants.MOTOR_POS_EST_TO_ACTUATOR_DEG
+        self.data.actuator_velocity = mc_data[moteusDataMap.VELOCITY.value] * self.constants.MOTOR_POS_EST_TO_ACTUATOR_DEG
+        self.data.actuator_torque = mc_data[moteusDataMap.TORQUE.value] * self.constants.MOTOR_TO_ACTUATOR_TR
         
         # CAM Angle
-        self.data.cam_velocity = mc_data[moteusDataMap.ENC2_VELOCITY] * self.constants.CAM_ENC_TO_DEG
+        self.data.cam_velocity = mc_data[moteusDataMap.ENC2_VELOCITY.value] * self.constants.CAM_ENC_TO_DEG
         last_cam_encoder_raw = self.data.cam_encoder_raw if self.data.cam_encoder_raw is not None else None
-        self.data.cam_encoder_raw = mc_data[moteusDataMap.ENC2_POSITION] * self.constants.CAM_ENC_TO_DEG
+        self.data.cam_encoder_raw = mc_data[moteusDataMap.ENC2_POSITION.value] * self.constants.CAM_ENC_TO_DEG
         cam_angle_jump = (self.data.cam_encoder_raw - last_cam_encoder_raw) if last_cam_encoder_raw is not None else 0
         if cam_angle_jump < -180:  # jump of -pi in degrees (from 2pi to 0) 
             cam_angle_wrapped = self.data.cam_encoder_raw + 360.0
@@ -168,11 +169,11 @@ class SpringActuator_moteus:
 
 # COMMANDING CONTROLLER FUNCTIONS
     # TODO: Read usage modes on moteus to see Kp_scale and k_scale usecase for improved controller performance
-    async def command_relative_actuator_angle(self, des_rel_angle: float):
+    async def command_relative_actuator_angle(self, des_rel_angle: float, start_angle: float):
         '''
         des_rel_angle: Takes in angle (degrees) to rotate actuator from current position
         '''        
-        desired_motor_pos = (des_rel_angle + self.data.actuator_angle) / self.constants.MOTOR_POS_EST_TO_ACTUATOR_DEG
+        desired_motor_pos = (des_rel_angle + start_angle) / self.constants.MOTOR_POS_EST_TO_ACTUATOR_DEG
         await self.motor_ctrl.set_position(position=desired_motor_pos, query = False)
 
     
@@ -181,7 +182,7 @@ class SpringActuator_moteus:
         des_velocity: Takes in velocity command in degrees/seconds
         '''
         # Velocity Saturation
-        des_velocity = max(des_velocity,self.config.actuatorVelocitySaturation)
+        des_velocity = min(des_velocity, self.config.actuatorVelocitySaturation)
         desired_motor_vel = des_velocity / self.constants.MOTOR_POS_EST_TO_ACTUATOR_DEG
         await self.motor_ctrl.set_position(position=math.nan, velocity=desired_motor_vel)
     
@@ -190,11 +191,11 @@ class SpringActuator_moteus:
         des_torque: Takes in torque command in Nm for actuator
         '''
         # Torque Saturation
-        des_torque = max(des_torque,self.config.actuatorTorqueSaturation)
+        des_torque = min(des_torque, self.config.actuatorTorqueSaturation)
         desired_motor_torque = des_torque / self.constants.MOTOR_TO_ACTUATOR_TR
         await self.motor_ctrl.set_position(torque = desired_motor_torque)
 
-    def command_cam_angle(self, des_angle: float, error_filter: filters.Filter):  
+    async def command_cam_angle(self, des_angle: float, error_filter: filters.Filter):  
         prev_cam_ang_err = self.data.cam_angle_error
         if prev_cam_ang_err is None:
             prev_cam_ang_err = 0.0
@@ -202,7 +203,7 @@ class SpringActuator_moteus:
         curr_cam_ang_err_diff = (curr_cam_ang_err - prev_cam_ang_err) * self.config.control_loop_freq
         curr_cam_ang_err_diff = error_filter.filter(curr_cam_ang_err_diff)
         des_act_vel = self.config.camControllerGainKp * curr_cam_ang_err + self.config.camControllerGainKd * curr_cam_ang_err_diff
-        self.command_actuator_velocity(des_velocity=des_act_vel)
+        await self.command_actuator_velocity(des_velocity=des_act_vel)
     
     async def command_controller_off(self):
         await self.motor_ctrl.set_stop()
@@ -217,57 +218,49 @@ class SpringActuator_moteus:
     #         print("Cam Angle:", self.data.cam_angle)
     #         print("Motor Angle: ", self.data.actuator_angle)
 
-    def initial_calibration(self):
+    async def initial_calibration(self):
         try:
-            '''Brings up slack, calibrates ankle and motor offset angles.'''
-            input('Press Enter to calibrate exo on')
             print('Calibrating...')
             cam_ang_filter = filters.MovingAverage(window_size=10)
             t0 = time.time()
             
-            self.command_actuator_velocity(-1* self.motor_sign * self.config.calibrationVelocity)
+            await self.command_actuator_velocity(-1 * self.motor_sign * self.config.calibrationVelocity)
             print("Actuator moving at velocity:", -1 * self.motor_sign * self.config.calibrationVelocity)
-            while time.time()-t0 < self.config.calibrationTime:
-                last_read_CAM_val = self.data.cam_encoder_raw
-                time.sleep(1/self.config.control_loop_freq)
-                self.read_data()
-                if(abs(cam_ang_filter.filter(self.data.cam_encoder_raw)-last_read_CAM_val) < self.config.calibrationEncNoiseLevel):
+            
+            for _ in range(int(self.config.calibrationTime * self.config.control_loop_freq)):
+                await asyncio.sleep(1/self.config.control_loop_freq)
+                await self.read_data()
+                
+                if abs(cam_ang_filter.filter(self.data.cam_encoder_raw) - self.data.cam_encoder_raw) < self.config.calibrationEncNoiseLevel:
                     self.cam_offset = self.data.cam_encoder_raw
                     break
-                
-            self.command_actuator_velocity(0)
-            time.sleep(0.1)
 
-            self.command_actuator_velocity(self.motor_sign * self.config.calibrationVelocity)
-            while time.time()-t0 < self.config.calibrationTime:
-                time.sleep(1/self.config.control_loop_freq)
-                self.read_data()
-                print("Angle: ", -1 * self.data.cam_angle)
-                print("Encoder: ", self.data.cam_encoder_raw)
-                if(cam_ang_filter.filter(-1 * self.data.cam_angle) > self.config.calibrationCamThreshold):
+            await self.command_actuator_velocity(0)
+            await asyncio.sleep(0.1)
+
+            await self.command_actuator_velocity(self.motor_sign * self.config.calibrationVelocity)
+            for _ in range(int(self.config.calibrationTime * self.config.control_loop_freq)):
+                await asyncio.sleep(1/self.config.control_loop_freq)
+                await self.read_data()
+                
+                if cam_ang_filter.filter(-1 * self.data.cam_angle) > self.config.calibrationCamThreshold:
                     self.actuator_offset = self.data.actuator_angle
                     self.has_calibrated = True
                     break
-            self.command_actuator_velocity(0)
+            
+            await self.command_actuator_velocity(0)
 
-
-            if not(self.has_calibrated):
+            if not self.has_calibrated:
                 raise RuntimeError('Calibration Timed Out!')
             
-            self.read_data()
-            print("CAM Angle: ", self.data.cam_angle)
-            print('CAM Offset: ', self.cam_offset)
-            print('Motor offset: ', self.actuator_offset)        
+            print(f"CAM Angle: {self.data.cam_angle}, CAM Offset: {self.cam_offset}, Motor Offset: {self.actuator_offset}")
             print('Finished Calibrating')
-            self.command_controller_off()
 
-        except Exception as err:
-            print(traceback.print_exc())
-            self.close()
-            raise RuntimeError('Calibration Failed') 
+        finally:
+            await self.command_controller_off()
 
-    def close(self):
-        self.command_controller_off()
+    async def close(self):
+        await self.command_controller_off()
         self.close_file()
 
 # Helper functions for conversion across different measurements
