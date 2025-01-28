@@ -1,15 +1,15 @@
 from ACTUATOR_CODE_ODRIVE import SpringActuator_ODrive
 import filters
-import enum
+from enum import Enum
 
-class SetpointType(enum):
-    CABLE_FORCE = 0
+class SetpointType(Enum):
+    NONE = 0
     CAM_ANGLE = 1
     ACTUATOR_VELOCITY = 2
     ACTUATOR_ANGLE = 4
     ACTUATOR_TORQUE = 5
     HOME_POSITION = 6
-    NONE = None
+    CABLE_FORCE = 7
 
 class Controller(object):
     '''Parent controller object. Child classes inherit methods.'''

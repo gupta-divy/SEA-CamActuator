@@ -7,7 +7,7 @@ class ParameterParser(threading.Thread):
                  new_setpoint_event: Type[threading.Event], 
                  quit_event: Type[threading.Event],
                  name = 'keyboard-input-thread'):
-        super().__init__(name)
+        super().__init__(name=name, group=None)
         self.setpoint_type: SetpointType = SetpointType.NONE
         self.setpoint_val: float = None
         self.setpoint_event = new_setpoint_event
@@ -20,7 +20,7 @@ class ParameterParser(threading.Thread):
         while True:
             msg=input()
             f_word = msg[0]
-            content = msg[1:-1]
+            content = msg[1:]
             if f_word == 'a':
                 self.lock.acquire()
                 self.setpoint_type = SetpointType.ACTUATOR_ANGLE

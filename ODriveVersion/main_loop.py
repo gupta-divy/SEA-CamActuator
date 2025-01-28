@@ -1,19 +1,20 @@
 import ACTUATOR_CODE_ODRIVE
 import time
 import traceback
-from Controllers import CommandSetpoint, SetpointType
+import Controllers
+from Controllers import SetpointType
 import threading
 from keyboard_interrupt_parser import ParameterParser
 
 # Main Code
-datafile_name = input('Input the Filename, if not given data wont be logged: ')
+# datafile_name = input('Input the Filename, if not given data wont be logged: ')
+datafile_name = "test0"
 actuator = ACTUATOR_CODE_ODRIVE.connect_to_actuator(dataFile_name=datafile_name)
-actuator.intial_calibration()
-desired_angle = int(input('Enter the cam_angle you want the controller to track: '))
+actuator.initial_calibration()
 print('Start!')
 
 # Setup controller
-actuator_controller = CommandSetpoint(actuator=actuator)
+actuator_controller = Controllers.CommandSetpoint(actuator)
 
 # Defining controller variables
 target_period = 1/actuator.config.control_loop_freq
@@ -35,6 +36,7 @@ while True:
 
         lock.acquire()
         if new_setpoint_event.is_set():
+            print(f"Updating controller: type={keyboard_thread.setpoint_type}, value={keyboard_thread.setpoint_val}")
             actuator_controller.update_controller_variables(setpoint_type=keyboard_thread.setpoint_type,
                                                             setpoint_value=keyboard_thread.setpoint_val)
             new_setpoint_event.clear()
@@ -51,8 +53,9 @@ while True:
     except KeyboardInterrupt:
         print('Ctrl-C detected, Getting Actuator to Home Position')
         actuator_controller.update_controller_variables(setpoint_type=SetpointType.HOME_POSITION, setpoint_value=0)
-        while(not actuator_controller.command()): time.sleep(target_period)
-        print("I'm Home, Now Existing Gracefully")
+        while not actuator_controller.command():
+            print("Commanding home position...")
+            time.sleep(target_period)
         break
 
     except Exception as err:

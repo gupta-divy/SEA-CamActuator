@@ -11,31 +11,33 @@ from odrive.enums import ControlMode, InputMode, AxisState
 import configuration
 
 class ControllerConfig:
-    control_loop_freq = 200
-    camControllerGainKp = 4
-    camControllerGainKd = 0.2
-    calibrationVelocity = 5         # deg / sec
-    calibrationTime = 5             # sec
-    calibrationEncNoiseLevel = 20   
-    calibrationCamThreshold = 5
+    control_loop_freq = 200             # hertz
+    camControllerGainKp = 2             
+    camControllerGainKd = 0.1           
+    calibrationVelocity = 15            # deg / sec
+    calibrationTime = 5                 # sec
+    calibrationEncNoiseLevel = 20       # counts
+    calibrationCamThreshold = 5         # deg
+    actuatorVelocitySaturation = 60     # deg / sec
+    actuatorTorqueSaturation = 3        # Nm 
 
 class Constants:
     MAX_ALLOWABLE_VOLTAGE_COMMAND = 3000                        # mV
     MAX_ALLOWABLE_CURRENT = 5000                                # mA
     MOTOR_TO_ACTUATOR_TR = 8
-    MOTOR_POS_EST_TO_ACTUATOR_DEG = 360 / MOTOR_TO_ACTUATOR_TR  # Deg / Revolution
-    CAM_ENC_TO_DEG = 360 / 2**16                                # Deg / Encoder Bits
+    MOTOR_POS_EST_TO_ACTUATOR_DEG = 360 / MOTOR_TO_ACTUATOR_TR  # Deg / Revolution / Transmission ratio
+    CAM_ENC_TO_DEG = 360                                        # Deg / Revolution
     MS_TO_SECONDS = 0.001
-    SPLINE_A_PTS_FORCE_ANGLE_CONVERSION = []
-    SPLINE_F_PTS_FORCE_ANGLE_CONVERSION = []
+    SPLINE_A_PTS_FORCE_ANGLE_CONVERSION = [0,10,20,40,70,80,85]
+    SPLINE_F_PTS_FORCE_ANGLE_CONVERSION = [2.15,2.2,2.275,2.4,6.5,9.5,11]
 
 class DesignConstants:
     'Actuator Design Constants, with measurements in mm and degrees with reference at CAM center'
     ACTUATOR_RADIUS = 0.0375 
     ROLLER_RADIUS = 0.0045
     CAM_LEVER_ARM = 0.055
-    ROLLER_A_CORD = (-36.14,61.24)*0.001
-    ROLLER_B_CORD = (-23.66,18)*0.001
+    ROLLER_A_CORD = (-36.14,61.24)
+    ROLLER_B_CORD = (-23.66,18)
     ROLLER_C_INIT_ANG = 59
     CAM_RANGE = 75  
     INIT_CABLE_LEN_BW_ANKLE_ACT = 0.0945
@@ -43,14 +45,14 @@ class DesignConstants:
 
 class SpringActuator_ODrive:
 # ACTUATOR INITIALIZATION AND DATA FUNCTIONS
-    def __init__(self, odrv: odrive.Odrive, dataFile_name: str, motor_serial: str):
+    def __init__(self, odrv, dataFile_name: str, motor_serial: str):
         self.odrv = odrv
         self.data = self.DataContainer()
         self.constants = Constants()
         self.design_constants = DesignConstants()
         self.config = ControllerConfig()
-        self.actuator_offset = None                    # post-calibration zero reference actuator angle
-        self.cam_offset = None                      # post-calibration zero reference cam angle
+        self.actuator_offset = None                 # post-calibration zero reference actuator angle
+        self.cam_offset = 0                         # post-calibration zero reference cam angle
         self.has_calibrated = False
         self.dataFile_name = dataFile_name
         self.setup_data_writer(dataFile_name)
@@ -82,7 +84,7 @@ class SpringActuator_ODrive:
         commanded_exo_torque: float = None
 
         # Extra logged values for Debug
-        cam_angle_error: float = None
+        cam_angle_error: float = None              
         cam_angle_error_integral: float = None
 
     def read_data(self, loop_time=None):
@@ -94,9 +96,9 @@ class SpringActuator_ODrive:
         self.data.motor_electrical_power = self.odrv.axis0.motor.electrical_power
         self.data.actuator_angle = self.odrv.axis0.pos_estimate * self.constants.MOTOR_POS_EST_TO_ACTUATOR_DEG
         self.data.actuator_velocity = self.odrv.axis0.vel_estimate * self.constants.MOTOR_POS_EST_TO_ACTUATOR_DEG
-        self.data.actuator_torque = self.axis0.motor.torque_estimate * self.constants.MOTOR_TO_ACTUATOR_TR
-        self.data.cam_encoder_raw = self.odrv.OnboardEncoder.raw
-        if(self.cam_offset!=None): self.data.cam_angle = (self.data.cam_encoder_raw - self.cam_offset) * self.constants.CAM_ENC_TO_DEG
+        self.data.actuator_torque = self.odrv.axis0.motor.torque_estimate * self.constants.MOTOR_TO_ACTUATOR_TR
+        self.data.cam_encoder_raw = self.odrv.onboard_encoder0.raw * self.constants.CAM_ENC_TO_DEG
+        if(self.cam_offset!=None): self.data.cam_angle = -1*(self.data.cam_encoder_raw - self.cam_offset)
         self.data.exo_angle_estimate = None             # Need to define helper function for this
         self.data.exo_velocity_estimate = None          # Need to define helper function for this
         self.data.exo_torque_estimate = None            # Need to define helper function for this
@@ -129,15 +131,15 @@ class SpringActuator_ODrive:
         mode options: Step Input = step, 2nd Order Filtered = filt, Trapezoidal Velocity Profile = trap 
         '''
         # filt and trap can be configured, check Odrive InputMode API reference
-        des_input_mode = [InputMode.PASSTHROUGH if mode=="step" else 
+        des_input_mode = (InputMode.PASSTHROUGH if mode=="step" else 
                           InputMode.POS_FILTER if mode=="filt" else
                           InputMode.TRAP_TRAJ if mode=="trap" else
-                          InputMode.PASSTHROUGH]
+                          InputMode.PASSTHROUGH)
         
-        if(self.odrv.axis0.controller.control_mode != ControlMode.POSITION_CONTROL):
+        if(self.odrv.axis0.controller.config.control_mode != ControlMode.POSITION_CONTROL):
             self.odrv.axis0.controller.config.control_mode = ControlMode.POSITION_CONTROL
         
-        if(self.odrv.axis0.controller.input_mode != des_input_mode):
+        if(self.odrv.axis0.controller.config.input_mode != des_input_mode):
             self.odrv.axis0.controller.config.input_mode = des_input_mode
         
         desired_motor_pos = (des_rel_angle + self.data.actuator_angle) / self.constants.MOTOR_POS_EST_TO_ACTUATOR_DEG
@@ -149,15 +151,18 @@ class SpringActuator_ODrive:
         mode: setpoint method for velocity controller,  DEFAULT = step_input
         mode options: Step Input = step, ramped Velocity to desired vel = ramp
         '''
-        des_input_mode = [InputMode.PASSTHROUGH if mode=="step" else 
+        des_input_mode = (InputMode.PASSTHROUGH if mode=="step" else 
                           InputMode.VEL_RAMP if mode=="ramp" else
-                          InputMode.PASSTHROUGH]
+                          InputMode.PASSTHROUGH)
         
-        if(self.odrv.axis0.controller.control_mode != ControlMode.VELOCITY_CONTROL):
+        if(self.odrv.axis0.controller.config.control_mode != ControlMode.VELOCITY_CONTROL):
             self.odrv.axis0.controller.config.control_mode = ControlMode.VELOCITY_CONTROL
         
-        if(self.odrv.axis0.controller.input_mode != des_input_mode):
+        if(self.odrv.axis0.controller.config.input_mode != des_input_mode):
             self.odrv.axis0.controller.config.input_mode = des_input_mode
+
+        # Velocity Saturation
+        des_velocity = max(des_velocity,self.config.actuatorVelocitySaturation)
         
         desired_motor_vel = des_velocity / self.constants.MOTOR_POS_EST_TO_ACTUATOR_DEG
         self.odrv.axis0.controller.input_vel = desired_motor_vel
@@ -168,21 +173,26 @@ class SpringActuator_ODrive:
         mode: setpoint method for torque controller,  DEFAULT = step_input
         mode options: Step Input = step, ramped torque to desired = ramp
         '''
-        des_input_mode = [InputMode.PASSTHROUGH if mode=="step" else 
+        des_input_mode = (InputMode.PASSTHROUGH if mode=="step" else 
                           InputMode.TORQUE_RAMP if mode=="ramp" else
-                          InputMode.PASSTHROUGH]
+                          InputMode.PASSTHROUGH)
         
-        if(self.odrv.axis0.controller.control_mode != ControlMode.TORQUE_CONTROL):
+        if(self.odrv.axis0.controller.config.control_mode != ControlMode.TORQUE_CONTROL):
             self.odrv.axis0.controller.config.control_mode = ControlMode.TORQUE_CONTROL
         
-        if(self.odrv.axis0.controller.input_mode != des_input_mode):
+        if(self.odrv.axis0.controller.config.input_mode != des_input_mode):
             self.odrv.axis0.controller.config.input_mode = des_input_mode
         
+        # Torque Saturation
+        des_torque = max(des_torque,self.config.actuatorTorqueSaturation)
+
         desired_motor_torque = des_torque / self.constants.MOTOR_TO_ACTUATOR_TR
         self.odrv.axis0.controller.input_torque = desired_motor_torque
 
-    def command_cam_angle(self, des_angle: float, error_filter: filters.Filter):
+    def command_cam_angle(self, des_angle: float, error_filter: filters.Filter):  
         prev_cam_ang_err = self.data.cam_angle_error
+        if prev_cam_ang_err is None:
+            prev_cam_ang_err = 0.0
         curr_cam_ang_err = des_angle - self.data.cam_angle
         curr_cam_ang_err_diff = (curr_cam_ang_err - prev_cam_ang_err) * self.config.control_loop_freq
         curr_cam_ang_err_diff = error_filter.filter(curr_cam_ang_err_diff)
@@ -195,7 +205,16 @@ class SpringActuator_ODrive:
         return
     
 # MECHANISM INITIAL CALIBRATION
-    def intial_calibration(self):
+
+    #def initial_calibration(self):
+        while(True):
+            time.sleep(1/self.config.control_loop_freq)
+            self.read_data()
+            print("Encoder value: ", self.data.cam_encoder_raw)
+            print("Cam Angle:", self.data.cam_angle)
+            print("Motor Angle: ", self.data.actuator_angle)
+
+    def initial_calibration(self):
         try:
             '''Brings up slack, calibrates ankle and motor offset angles.'''
             input('Press Enter to calibrate exo on')
@@ -204,11 +223,12 @@ class SpringActuator_ODrive:
             t0 = time.time()
             
             self.command_actuator_velocity(-1* self.motor_sign * self.config.calibrationVelocity)
+            print("Actuator moving at velocity:", -1 * self.motor_sign * self.config.calibrationVelocity)
             while time.time()-t0 < self.config.calibrationTime:
                 last_read_CAM_val = self.data.cam_encoder_raw
                 time.sleep(1/self.config.control_loop_freq)
                 self.read_data()
-                if(abs(cam_ang_filter(self.data.cam_encoder_raw)-last_read_CAM_val) < self.config.calibrationEncNoiseLevel):
+                if(abs(cam_ang_filter.filter(self.data.cam_encoder_raw)-last_read_CAM_val) < self.config.calibrationEncNoiseLevel):
                     self.cam_offset = self.data.cam_encoder_raw
                     break
                 
@@ -219,11 +239,14 @@ class SpringActuator_ODrive:
             while time.time()-t0 < self.config.calibrationTime:
                 time.sleep(1/self.config.control_loop_freq)
                 self.read_data()
-                if(cam_ang_filter(self.data.cam_angle) > self.config.calibrationCamThreshold):
+                print("Angle: ", -1 * self.data.cam_angle)
+                print("Encoder: ", self.data.cam_encoder_raw)
+                if(cam_ang_filter.filter(-1 * self.data.cam_angle) > self.config.calibrationCamThreshold):
                     self.actuator_offset = self.data.actuator_angle
                     self.has_calibrated = True
                     break
             self.command_actuator_velocity(0)
+
 
             if not(self.has_calibrated):
                 raise RuntimeError('Calibration Timed Out!')
@@ -233,6 +256,7 @@ class SpringActuator_ODrive:
             print('CAM Offset: ', self.cam_offset)
             print('Motor offset: ', self.actuator_offset)        
             print('Finished Calibrating')
+            self.command_controller_off()
 
         except Exception as err:
             print(traceback.print_exc())
@@ -251,7 +275,7 @@ def connect_to_actuator(dataFile_name: str):
     '''Connect to Actuator, instantiate Actuator object'''
     # Connection settings
     try:
-        odrv: odrive.Odrive = odrive.find_any()
+        odrv = odrive.find_any()
     except Exception as err:
         traceback.print_exc()
         raise RuntimeError('Unable to connect to Odrive, Check Connection')
