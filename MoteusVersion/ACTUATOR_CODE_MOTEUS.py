@@ -25,20 +25,19 @@ class moteusDataMap(Enum):
 
 class ControllerConfig:
     control_loop_freq = 200             # hertz
-    camControllerGainKp = 2             
-    camControllerGainKd = 0.1           
-    calibrationVelocity = 15            # deg / sec
+    camControllerGainKp = 2.5             
+    camControllerGainKd = 0.2           
+    calibrationVelocity = 60            # deg / sec
     calibrationTime = 5                 # sec
-    calibrationEncNoiseLevel = 20       # counts
     calibrationCamThreshold = 5         # deg
     actuatorVelocitySaturation = 720     # deg / sec
     actuatorTorqueSaturation = 3        # Nm 
-    homeAngleThreshold = 3
+    homeAngleThreshold = 5
 
 class Constants:
     MAX_ALLOWABLE_VOLTAGE_COMMAND = 3000                        # mV
     MAX_ALLOWABLE_CURRENT = 5000                                # mA
-    MOTOR_TO_ACTUATOR_TR = 1
+    MOTOR_TO_ACTUATOR_TR = 8
     MOTOR_POS_EST_TO_ACTUATOR_DEG = 360 / MOTOR_TO_ACTUATOR_TR  # Deg / Revolution / Transmission ratio
     CAM_ENC_TO_DEG = 360                                        # Deg / Revolution
     MS_TO_SECONDS = 0.001
@@ -66,7 +65,7 @@ class SpringActuator_moteus:
         self.design_constants = DesignConstants()
         self.config = ControllerConfig()
         self.actuator_offset = None                 # post-calibration zero reference actuator angle
-        self.cam_offset = 0                         # post-calibration zero reference cam angle
+        self.cam_offset = None                      # post-calibration zero reference cam angle
         self.has_calibrated = False
         self.dataFile_name = dataFile_name
         self.setup_data_writer(dataFile_name)
@@ -137,11 +136,11 @@ class SpringActuator_moteus:
         last_cam_encoder_raw = self.data.cam_encoder_raw if self.data.cam_encoder_raw is not None else None
         self.data.cam_encoder_raw = mc_data[moteusDataMap.ENC2_POSITION.value] * self.constants.CAM_ENC_TO_DEG
         cam_angle_jump = (self.data.cam_encoder_raw - last_cam_encoder_raw) if last_cam_encoder_raw is not None else 0
-        if cam_angle_jump < -180:  # jump of -pi in degrees (from 2pi to 0) 
-            cam_angle_wrapped = self.data.cam_encoder_raw + 360.0
+        if cam_angle_jump > 180:  # jump of pi in degrees (from 0 to 2pi as angle increases), though shouldn't be an issue as per current configuration 
+            cam_angle_wrapped = self.data.cam_encoder_raw - 360.0
         else:
             cam_angle_wrapped = self.data.cam_encoder_raw
-        self.data.cam_angle = (cam_angle_wrapped - self.cam_offset) if self.cam_offset!=None else None
+        self.data.cam_angle = -1*(cam_angle_wrapped - self.cam_offset) if self.cam_offset != None else None
         
         self.data.exo_angle_estimate = None             # Need to define helper function for this
         self.data.exo_velocity_estimate = None          # Need to define helper function for this
@@ -169,11 +168,11 @@ class SpringActuator_moteus:
 
 # COMMANDING CONTROLLER FUNCTIONS
     # TODO: Read usage modes on moteus to see Kp_scale and k_scale usecase for improved controller performance
-    async def command_relative_actuator_angle(self, des_rel_angle: float, start_angle: float):
+    async def command_relative_actuator_angle(self, des_rel_angle: float, reference_angle: float):
         '''
         des_rel_angle: Takes in angle (degrees) to rotate actuator from current position
         '''        
-        desired_motor_pos = (des_rel_angle + start_angle) / self.constants.MOTOR_POS_EST_TO_ACTUATOR_DEG
+        desired_motor_pos = (des_rel_angle + reference_angle) / self.constants.MOTOR_POS_EST_TO_ACTUATOR_DEG
         await self.motor_ctrl.set_position(position=desired_motor_pos, query = False)
 
     
@@ -203,57 +202,51 @@ class SpringActuator_moteus:
         curr_cam_ang_err_diff = (curr_cam_ang_err - prev_cam_ang_err) * self.config.control_loop_freq
         curr_cam_ang_err_diff = error_filter.filter(curr_cam_ang_err_diff)
         des_act_vel = self.config.camControllerGainKp * curr_cam_ang_err + self.config.camControllerGainKd * curr_cam_ang_err_diff
+        print("Velocity Command: ", des_act_vel, "CAM Angle: ", self.data.cam_angle)
+        # des_act_vel = min(des_act_vel,360) if des_act_vel>0 else max(des_act_vel,-360)
+        if(self.data.cam_angle>60): 
+            await self.command_actuator_velocity(des_velocity=0) 
+            return
+        if(self.data.cam_angle<5): 
+            await self.command_actuator_velocity(des_velocity=0)
+            return
         await self.command_actuator_velocity(des_velocity=des_act_vel)
     
     async def command_controller_off(self):
         await self.motor_ctrl.set_stop()
 
 # MECHANISM INITIAL CALIBRATION
-
-    # def initial_calibration(self):
-    #     while(True):
-    #         time.sleep(1/self.config.control_loop_freq)
-    #         self.read_data()
-    #         print("Encoder value: ", self.data.cam_encoder_raw)
-    #         print("Cam Angle:", self.data.cam_angle)
-    #         print("Motor Angle: ", self.data.actuator_angle)
-
     async def initial_calibration(self):
         try:
             print('Calibrating...')
-            cam_ang_filter = filters.MovingAverage(window_size=10)
-            t0 = time.time()
-            
-            await self.command_actuator_velocity(-1 * self.motor_sign * self.config.calibrationVelocity)
-            print("Actuator moving at velocity:", -1 * self.motor_sign * self.config.calibrationVelocity)
-            
-            for _ in range(int(self.config.calibrationTime * self.config.control_loop_freq)):
-                await asyncio.sleep(1/self.config.control_loop_freq)
+            stability_window_size=20
+            stability_window = []
+            for i in range(int(self.config.calibrationTime * self.config.control_loop_freq)):
+                await self.command_actuator_velocity(-1 * self.motor_sign * self.config.calibrationVelocity)
                 await self.read_data()
-                
-                if abs(cam_ang_filter.filter(self.data.cam_encoder_raw) - self.data.cam_encoder_raw) < self.config.calibrationEncNoiseLevel:
+                stability_window.append(self.data.cam_encoder_raw)
+                if len(stability_window) > stability_window_size:
+                    stability_window.pop(0)
+                if i>stability_window_size and abs((max(stability_window) - min(stability_window))) < 0.5:
                     self.cam_offset = self.data.cam_encoder_raw
                     break
-
+                time.sleep(1/self.config.control_loop_freq)
             await self.command_actuator_velocity(0)
-            await asyncio.sleep(0.1)
-
-            await self.command_actuator_velocity(self.motor_sign * self.config.calibrationVelocity)
             for _ in range(int(self.config.calibrationTime * self.config.control_loop_freq)):
-                await asyncio.sleep(1/self.config.control_loop_freq)
                 await self.read_data()
-                
-                if cam_ang_filter.filter(-1 * self.data.cam_angle) > self.config.calibrationCamThreshold:
+                await self.command_actuator_velocity(self.motor_sign * self.config.calibrationVelocity)
+                if self.data.cam_angle > self.config.calibrationCamThreshold:
                     self.actuator_offset = self.data.actuator_angle
                     self.has_calibrated = True
                     break
+                time.sleep(1/self.config.control_loop_freq)
             
             await self.command_actuator_velocity(0)
 
             if not self.has_calibrated:
                 raise RuntimeError('Calibration Timed Out!')
             
-            print(f"CAM Angle: {self.data.cam_angle}, CAM Offset: {self.cam_offset}, Motor Offset: {self.actuator_offset}")
+            print(f"CAM Angle: {self.data.cam_angle}, CAM Offset: {self.cam_offset}, Actuator Offset: {self.actuator_offset}")
             print('Finished Calibrating')
 
         finally:

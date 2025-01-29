@@ -10,6 +10,8 @@ import asyncio
 async def main():
     datafile_name = "test0"
     actuator = await ACTUATOR_CODE_MOTEUS.connect_to_actuator(dataFile_name=datafile_name)
+    # input("Press Enter to Start")
+    await actuator.initial_calibration()
     print('Start!')
 
     # Setup controller
@@ -49,15 +51,13 @@ async def main():
             loop_time = time_now - t0 
 
             await actuator.read_data(loop_time=loop_time)
+            # print(actuator.data.cam_angle, actuator.data.cam_encoder_raw)
             await actuator_controller.command()
             actuator.write_data()
 
         except KeyboardInterrupt:
             print('Ctrl-C detected, Getting Actuator to Home Position')
-            # actuator_controller.update_controller_variables(setpoint_type=SetpointType.HOME_POSITION, setpoint_value=0)
-            # while not await actuator_controller.command():
-            #     print("Commanding home position...")
-            #     await asyncio.sleep(target_period)
+            
             break
 
         except Exception as err:
@@ -66,9 +66,16 @@ async def main():
             break
 
     if quit_event.is_set():
+        actuator_controller.update_controller_variables(setpoint_type=SetpointType.HOME_POSITION, setpoint_value=0)
+        while True:
+            await actuator.read_data()
+            home_point_reached = await actuator_controller.command()
+            if(home_point_reached): break
+            print("Commanding home position...")
+            await asyncio.sleep(target_period)
         print("I'm Home, Now Exiting Gracefully")
         quit_event.clear()
-
+ 
     await actuator.close()
     print('Done')
 
