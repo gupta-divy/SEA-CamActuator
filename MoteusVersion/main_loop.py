@@ -21,15 +21,15 @@ async def main():
     target_period = 1 / actuator.config.control_loop_freq
     t0 = time.perf_counter()
     last_actuation_time = t0
-
+    last_print_time = t0
     # Keyboard interrupt initialization
     lock = threading.Lock()
     quit_event = threading.Event()
     new_setpoint_event = threading.Event()
     gain_event = threading.Event()
-
+    error_tracking = 0
     keyboard_thread = ParameterParser(lock=lock, quit_event=quit_event, new_setpoint_event=new_setpoint_event, gain_event=gain_event)
-
+   
     while True:
         try:
             while time.perf_counter() - last_actuation_time < target_period:
@@ -59,13 +59,18 @@ async def main():
             last_actuation_time = time_now
             loop_time = time_now - t0 
 
+            if time_now - last_print_time >= 0.5:
+                print("Velocity: ", actuator.data.actuator_velocity, "Cam Angle: ", actuator.data.cam_angle, "Gains", actuator.config.camControllerGainKp, actuator.config.camControllerGainKd)
+                last_print_time = time_now  # Update the last controller update timestamp
+
             await actuator.read_data(loop_time=loop_time)
-            # print(actuator.data.cam_angle, actuator.data.cam_encoder_raw)
+            error_tracking += abs(actuator_controller.setpoint_value - actuator.data.cam_angle) if actuator_controller.setpoint_type==SetpointType.CAM_ANGLE else 0
             await actuator_controller.command()
             actuator.write_data()
 
             if actuator_controller.setpoint_type == SetpointType.CAM_ANGLE and (actuator.data.cam_angle>60 or actuator.data.cam_angle<3): 
-                await actuator.command_actuator_velocity(des_velocity=0) 
+                await actuator.command_actuator_velocity(des_velocity=0)
+
                 break
 
         except KeyboardInterrupt:
@@ -87,6 +92,7 @@ async def main():
             print("Commanding home position...")
             await asyncio.sleep(target_period)
         print("I'm Home, Now Exiting Gracefully")
+        print(error_tracking)
         quit_event.clear()
  
     await actuator.close()

@@ -2,7 +2,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # File path
-csv_file = "20250130_1701_test0.csv"
+csv_file = "20250131_1615_test0.csv"
+
 
 # User-defined parameters
 start_time = 0    # Change to desired start time (in seconds)
@@ -42,4 +43,4 @@ plt.title("Cam Angle & Actuator Velocity vs. Loop Time")
 ax1.grid(True)
 
 # Show the plot
-plt.show()
+plt.show() 
