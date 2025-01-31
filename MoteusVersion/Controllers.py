@@ -51,7 +51,7 @@ class CommandSetpoint(Controller):
                     await self.actuator.command_actuator_torque(torque)
 
             elif self.setpoint_type == SetpointType.HOME_POSITION:
-                await self.actuator.command_cam_angle(0, error_filter=self.butterfilter)
+                await self.actuator.command_cam_angle(4.8, error_filter=self.butterfilter)
                 if self.actuator.data.cam_angle < self.actuator.config.homeAngleThreshold:
                     self.tracking_status = True
 

@@ -26,8 +26,9 @@ async def main():
     lock = threading.Lock()
     quit_event = threading.Event()
     new_setpoint_event = threading.Event()
+    gain_event = threading.Event()
 
-    keyboard_thread = ParameterParser(lock=lock, quit_event=quit_event, new_setpoint_event=new_setpoint_event)
+    keyboard_thread = ParameterParser(lock=lock, quit_event=quit_event, new_setpoint_event=new_setpoint_event, gain_event=gain_event)
 
     while True:
         try:
@@ -44,6 +45,14 @@ async def main():
                         setpoint_value=keyboard_thread.setpoint_val,
                     )
                     new_setpoint_event.clear()
+
+                if gain_event.is_set():
+                    if keyboard_thread.control_gain_type=='p':
+                        actuator.config.camControllerGainKp = keyboard_thread.control_gain
+                    elif keyboard_thread.control_gain_type=='d':
+                        actuator.config.camControllerGainKd = keyboard_thread.control_gain
+                    gain_event.clear()
+
                 if quit_event.is_set():
                     break
 
@@ -54,6 +63,10 @@ async def main():
             # print(actuator.data.cam_angle, actuator.data.cam_encoder_raw)
             await actuator_controller.command()
             actuator.write_data()
+
+            if actuator_controller.setpoint_type == SetpointType.CAM_ANGLE and (actuator.data.cam_angle>60 or actuator.data.cam_angle<3): 
+                await actuator.command_actuator_velocity(des_velocity=0) 
+                break
 
         except KeyboardInterrupt:
             print('Ctrl-C detected, Getting Actuator to Home Position')

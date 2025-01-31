@@ -5,13 +5,17 @@ from Controllers import SetpointType
 class ParameterParser(threading.Thread):
     def __init__(self, lock: Type[threading.Lock], 
                  new_setpoint_event: Type[threading.Event], 
-                 quit_event: Type[threading.Event], 
+                 quit_event: Type[threading.Event],
+                 gain_event: Type[threading.Event], 
                  name='keyboard-input-thread'):
         super().__init__(name=name, group=None)
         self.setpoint_type: SetpointType = SetpointType.NONE
-        self.setpoint_val: float = None
+        self.setpoint_val: float = 0.0
+        self.control_gain: float = 0.0
+        self.control_gain_type: str = ''
         self.setpoint_event = new_setpoint_event
         self.quit_event = quit_event
+        self.gain_event = gain_event
         self.lock = lock
         self.daemon = True  # Ensures thread exits when the main program ends
         self.start()
@@ -36,12 +40,29 @@ class ParameterParser(threading.Thread):
                         self.quit_event.set()
                     print("Quit command received. Exiting input thread.")
                     break
-
+                
                 try:
                     value = float(content) if content else 0.0
                 except ValueError:
                     print("Invalid value. Please enter a valid number after the command letter.")
                     continue
+
+
+                if f_word == 'p' or f_word == 'd':
+                    with self.lock:
+                        if f_word=='p':
+                            self.control_gain_type = 'p'
+                            self.control_gain = value
+                        elif f_word=='d':
+                            self.control_gain_type = 'd'
+                            self.control_gain = value
+                        else:
+                            print('Invalid input')
+                            continue
+                            
+                        self.gain_event.set()
+                        print("Control Gains Updated: ", self.control_gain_type, ' Value: ', self.control_gain)
+                        continue
 
                 with self.lock:
                     if f_word == 'a':

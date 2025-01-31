@@ -25,12 +25,12 @@ class moteusDataMap(Enum):
 
 class ControllerConfig:
     control_loop_freq = 200             # hertz
-    camControllerGainKp = 2.5             
-    camControllerGainKd = 0.2           
+    camControllerGainKp = 4.0            
+    camControllerGainKd = 0.25            
     calibrationVelocity = 60            # deg / sec
     calibrationTime = 5                 # sec
     calibrationCamThreshold = 5         # deg
-    actuatorVelocitySaturation = 720     # deg / sec
+    actuatorVelocitySaturation = 1500    # deg / sec
     actuatorTorqueSaturation = 3        # Nm 
     homeAngleThreshold = 5
 
@@ -181,7 +181,7 @@ class SpringActuator_moteus:
         des_velocity: Takes in velocity command in degrees/seconds
         '''
         # Velocity Saturation
-        des_velocity = min(des_velocity, self.config.actuatorVelocitySaturation)
+        des_velocity = min(des_velocity, self.config.actuatorVelocitySaturation) if des_velocity>0 else max(des_velocity, -self.config.actuatorVelocitySaturation)
         desired_motor_vel = des_velocity / self.constants.MOTOR_POS_EST_TO_ACTUATOR_DEG
         await self.motor_ctrl.set_position(position=math.nan, velocity=desired_motor_vel)
     
@@ -202,14 +202,7 @@ class SpringActuator_moteus:
         curr_cam_ang_err_diff = (curr_cam_ang_err - prev_cam_ang_err) * self.config.control_loop_freq
         curr_cam_ang_err_diff = error_filter.filter(curr_cam_ang_err_diff)
         des_act_vel = self.config.camControllerGainKp * curr_cam_ang_err + self.config.camControllerGainKd * curr_cam_ang_err_diff
-        print("Velocity Command: ", des_act_vel, "CAM Angle: ", self.data.cam_angle)
-        # des_act_vel = min(des_act_vel,360) if des_act_vel>0 else max(des_act_vel,-360)
-        if(self.data.cam_angle>60): 
-            await self.command_actuator_velocity(des_velocity=0) 
-            return
-        if(self.data.cam_angle<5): 
-            await self.command_actuator_velocity(des_velocity=0)
-            return
+        print("Velocity Command: ", des_act_vel, "CAM Angle: ", self.data.cam_angle, "Gains: ", self.config.camControllerGainKp, ' ', self.config.camControllerGainKd)
         await self.command_actuator_velocity(des_velocity=des_act_vel)
     
     async def command_controller_off(self):
