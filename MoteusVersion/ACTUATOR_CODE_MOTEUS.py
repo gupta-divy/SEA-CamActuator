@@ -25,8 +25,8 @@ class moteusDataMap(Enum):
 
 class ControllerConfig:
     control_loop_freq = 200             # hertz
-    camControllerGainKp = 4.0           
-    camControllerGainKd = 0.0           
+    camControllerGainKp = 160          
+    camControllerGainKd = 0.25           
     calibrationVelocity = 60            # deg / sec
     calibrationTime = 5                 # sec
     calibrationCamThreshold = 5         # deg
@@ -100,7 +100,7 @@ class SpringActuator_moteus:
         commanded_exo_torque: float = None
 
         # Extra logged values for Debug
-        cam_angle_error: float = None              
+        cam_angle_error: float = 0              
         cam_angle_error_integral: float = None
 
     async def read_data(self, loop_time=None):
@@ -141,7 +141,6 @@ class SpringActuator_moteus:
         else:
             cam_angle_wrapped = self.data.cam_encoder_raw
         self.data.cam_angle = -1*(cam_angle_wrapped - self.cam_offset) if self.cam_offset != None else None
-        
         self.data.exo_angle_estimate = None             # Need to define helper function for this
         self.data.exo_velocity_estimate = None          # Need to define helper function for this
         self.data.exo_torque_estimate = None            # Need to define helper function for this
@@ -161,6 +160,8 @@ class SpringActuator_moteus:
             '''file_ID is used as a custom file identifier after date.'''
             # subfolder_name = 'exo_data/'
             self.filename = time.strftime("%Y%m%d_%H%M_") + file_ID + '.csv'
+            with open('curr_datafile_name.txt', 'w') as f:
+                f.write(self.filename)
             self.my_file = open(self.filename, 'w', newline='')
             self.writer = csv.DictWriter(
                 self.my_file, fieldnames=self.data.__dict__.keys())
@@ -168,6 +169,10 @@ class SpringActuator_moteus:
 
 # COMMANDING CONTROLLER FUNCTIONS
     # TODO: Read usage modes on moteus to see Kp_scale and k_scale usecase for improved controller performance
+    def update_camController_gains(self, kp_gain = None, kd_gain = None):
+        if kp_gain != None: self.config.camControllerGainKp = kp_gain
+        if kd_gain != None: self.config.camControllerGainKd = kd_gain
+
     async def command_relative_actuator_angle(self, des_rel_angle: float, reference_angle: float):
         '''
         des_rel_angle: Takes in angle (degrees) to rotate actuator from current position
@@ -202,7 +207,7 @@ class SpringActuator_moteus:
         curr_cam_ang_err_diff = (curr_cam_ang_err - prev_cam_ang_err) * self.config.control_loop_freq
         curr_cam_ang_err_diff = error_filter.filter(curr_cam_ang_err_diff)
         des_act_vel = self.config.camControllerGainKp * curr_cam_ang_err + self.config.camControllerGainKd * curr_cam_ang_err_diff
-        
+        self.data.cam_angle_error = curr_cam_ang_err
         await self.command_actuator_velocity(des_velocity=des_act_vel)
     
     async def command_controller_off(self):
@@ -248,6 +253,7 @@ class SpringActuator_moteus:
     async def close(self):
         await self.command_controller_off()
         self.close_file()
+        
 
 # Helper functions for conversion across different measurements
     def _force_to_CAM_angle(self,cable_force):
