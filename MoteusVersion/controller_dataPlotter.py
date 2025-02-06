@@ -2,7 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # File path
-csv_file = "20250131_1713_test0.csv"
+csv_file = "20250205_1734_test0.csv"
 
 
 # User-defined parameters
@@ -27,7 +27,9 @@ df_filtered = df[(df["loop_time"] >= start_time) & (df["loop_time"] <= end_time)
 fig, ax1 = plt.subplots(figsize=(8, 5))
 
 # Plot cam_angle on the left y-axis
-ax1.plot(df_filtered["loop_time"], df_filtered["cam_angle"], linestyle="-", color="b", label="Cam Angle")
+# ax1.plot(df_filtered["loop_time"], df_filtered["cam_velocity"], linestyle="-", color="b", label="Cam Angle")
+
+ax1.plot(df_filtered["loop_time"], df_filtered["cam_velocity"],df_filtered["loop_time"], df_filtered["disturbance_velocity"], df_filtered["loop_time"], df_filtered["cam_angle"])
 ax1.set_xlabel("Loop Time (s)")
 ax1.set_ylabel("Cam Angle", color="b")
 ax1.tick_params(axis='y', labelcolor="b")
@@ -37,6 +39,7 @@ ax2 = ax1.twinx()
 ax2.plot(df_filtered["loop_time"], df_filtered["actuator_velocity"], linestyle="--", color="r", label="Actuator Velocity")
 ax2.set_ylabel("Actuator Velocity", color="r")
 ax2.tick_params(axis='y', labelcolor="r")
+
 
 # Add title and grid
 plt.title("Cam Angle & Actuator Velocity vs. Loop Time")

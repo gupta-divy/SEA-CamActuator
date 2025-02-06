@@ -1,6 +1,7 @@
 import filters
 import asyncio
 from scipy.interpolate import pchip_interpolate
+import numpy as np
 import math
 import traceback
 from dataclasses import dataclass
@@ -24,9 +25,9 @@ class moteusDataMap(Enum):
     CONTROLLER_CLOCK = 112
 
 class ControllerConfig:
-    control_loop_freq = 200             # hertz
-    camControllerGainKp = 160          
-    camControllerGainKd = 0.25           
+    control_loop_freq = 300             # hertz
+    camControllerGainKp = 120          
+    camControllerGainKd = 0.15           
     calibrationVelocity = 60            # deg / sec
     calibrationTime = 5                 # sec
     calibrationCamThreshold = 5         # deg
@@ -41,12 +42,13 @@ class Constants:
     MOTOR_POS_EST_TO_ACTUATOR_DEG = 360 / MOTOR_TO_ACTUATOR_TR  # Deg / Revolution / Transmission ratio
     CAM_ENC_TO_DEG = 360                                        # Deg / Revolution
     MS_TO_SECONDS = 0.001
+    CAM_ANG_TO_CABLE_LEN_POLYNOMIAL = [6.239043371086961e-08, -7.799365622162653e-06, 0.00038192703646943165, -0.011057441844762825, -1.4114122691159243, 153.73206761490567]
     SPLINE_A_PTS_FORCE_ANGLE_CONVERSION = [0,10,20,40,70,80,85]
     SPLINE_F_PTS_FORCE_ANGLE_CONVERSION = [2.15,2.2,2.275,2.4,6.5,9.5,11]
 
 class DesignConstants:
     'Actuator Design Constants, with measurements in mm and degrees with reference at CAM center'
-    ACTUATOR_RADIUS = 0.0375 
+    ACTUATOR_RADIUS = 0.0375  
     ROLLER_RADIUS = 0.0045
     CAM_LEVER_ARM = 0.055
     ROLLER_A_CORD = (-36.14,61.24)
@@ -67,6 +69,8 @@ class SpringActuator_moteus:
         self.actuator_offset = None                 # post-calibration zero reference actuator angle
         self.cam_offset = None                      # post-calibration zero reference cam angle
         self.has_calibrated = False
+        self.func_camAng_to_cableLen = np.poly1d(self.constants.CAM_ANG_TO_CABLE_LEN_POLYNOMIAL)
+        self.func_camAng_to_cableLen_dot = np.polyder(self.func_camAng_to_cableLen)
         self.dataFile_name = dataFile_name
         self.setup_data_writer(dataFile_name)
         self.motor_sign = 1                         # motor_serial to be used to update motor_sign if required
@@ -92,7 +96,7 @@ class SpringActuator_moteus:
         commanded_actuator_velocity: float = None
         commanded_actuator_torque: float = None
         commanded_cam_angle: float = None
-
+        disturbance_velocity: float = None
         # Extra logged values for use with Exoskeleton
         exo_angle_estimate: float = None
         exo_velocity_estimate: float = None
@@ -132,7 +136,7 @@ class SpringActuator_moteus:
         self.data.actuator_torque = mc_data[moteusDataMap.TORQUE.value] * self.constants.MOTOR_TO_ACTUATOR_TR
         
         # CAM Angle
-        self.data.cam_velocity = mc_data[moteusDataMap.ENC2_VELOCITY.value] * self.constants.CAM_ENC_TO_DEG
+        self.data.cam_velocity = -1*mc_data[moteusDataMap.ENC2_VELOCITY.value] * self.constants.CAM_ENC_TO_DEG
         last_cam_encoder_raw = self.data.cam_encoder_raw if self.data.cam_encoder_raw is not None else None
         self.data.cam_encoder_raw = mc_data[moteusDataMap.ENC2_POSITION.value] * self.constants.CAM_ENC_TO_DEG
         cam_angle_jump = (self.data.cam_encoder_raw - last_cam_encoder_raw) if last_cam_encoder_raw is not None else 0
@@ -141,6 +145,7 @@ class SpringActuator_moteus:
         else:
             cam_angle_wrapped = self.data.cam_encoder_raw
         self.data.cam_angle = -1*(cam_angle_wrapped - self.cam_offset) if self.cam_offset != None else None
+        self.data.disturbance_velocity = self._disturbance_observer() if self.has_calibrated else 0
         self.data.exo_angle_estimate = None             # Need to define helper function for this
         self.data.exo_velocity_estimate = None          # Need to define helper function for this
         self.data.exo_torque_estimate = None            # Need to define helper function for this
@@ -258,6 +263,10 @@ class SpringActuator_moteus:
 # Helper functions for conversion across different measurements
     def _force_to_CAM_angle(self,cable_force):
         return pchip_interpolate(self.constants.SPLINE_F_PTS_FORCE_ANGLE_CONVERSION, self.constants.SPLINE_A_PTS_FORCE_ANGLE_CONVERSION, cable_force)
+
+    def _disturbance_observer(self):
+        disturbance_vel = -(self.func_camAng_to_cableLen_dot(self.data.cam_angle)*self.data.cam_velocity) - ((self.data.actuator_velocity*math.pi/180)*self.design_constants.ACTUATOR_RADIUS*1000)
+        return disturbance_vel
 
 async def connect_to_actuator(dataFile_name: str):
     '''Connect to Actuator, instantiate Actuator object'''

@@ -23,7 +23,7 @@ async def main():
     last_actuation_time = t0
     last_print_time = t0
     # Keyboard interrupt initialization
-    lock = threading.Lock()
+    lock = threading.Lock() 
     quit_event = threading.Event()
     new_setpoint_event = threading.Event()
     gain_event = threading.Event()
@@ -34,9 +34,7 @@ async def main():
         try:
             while time.perf_counter() - last_actuation_time < target_period:
                 await asyncio.sleep(0.001)  # Non-blocking wait
-
             time_now = time.perf_counter()
-
             with lock:
                 if new_setpoint_event.is_set():
                     print(f"Updating controller: type={keyboard_thread.setpoint_type}, value={keyboard_thread.setpoint_val}")
@@ -67,14 +65,12 @@ async def main():
             error_tracking += abs(actuator_controller.setpoint_value - actuator.data.cam_angle) if actuator_controller.setpoint_type==SetpointType.CAM_ANGLE else 0
             await actuator_controller.command()
             actuator.write_data()
-
-            if actuator_controller.setpoint_type == SetpointType.CAM_ANGLE and (actuator.data.cam_angle>60 or actuator.data.cam_angle<3): 
+            if actuator_controller.setpoint_type == SetpointType.CAM_ANGLE and (actuator.data.cam_angle>68 or actuator.data.cam_angle<3): 
                 await actuator.command_actuator_velocity(des_velocity=0)
                 break
 
         except KeyboardInterrupt:
             print('Ctrl-C detected, Getting Actuator to Home Position')
-            
             break
 
         except Exception as err:
@@ -83,6 +79,7 @@ async def main():
             break
 
     if quit_event.is_set():
+        actuator.update_camController_gains(kp_gain=50 ,kd_gain=0.2)
         actuator_controller.update_controller_variables(setpoint_type=SetpointType.HOME_POSITION, setpoint_value=0)
         while True:
             await actuator.read_data()
