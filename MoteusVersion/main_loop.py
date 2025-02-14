@@ -2,10 +2,12 @@ import ACTUATOR_CODE_MOTEUS
 import time
 import traceback
 import Controllers
+
 from Controllers import SetpointType
 import threading
 from keyboard_interrupt_parser import ParameterParser
 import asyncio
+import math
 
 async def main():
     datafile_name = "test0"
@@ -33,7 +35,8 @@ async def main():
     while True:
         try:
             while time.perf_counter() - last_actuation_time < target_period:
-                await asyncio.sleep(0.001)  # Non-blocking wait
+                # await asyncio.sleep(0.001)  # Non-blocking wait
+                pass
             time_now = time.perf_counter()
             with lock:
                 if new_setpoint_event.is_set():
@@ -57,15 +60,17 @@ async def main():
             last_actuation_time = time_now
             loop_time = time_now - t0 
 
-            if time_now - last_print_time >= 0.1:
-                print("Velocity: ", actuator.data.actuator_velocity, "Cam Angle: ", actuator.data.cam_angle, "Gains", actuator.config.camControllerGainKp, actuator.config.camControllerGainKd)
+            if time_now - last_print_time >= 0.5:
+                # print("Velocity: ", actuator.data.actuator_velocity, "Cam Angle: ", actuator.data.cam_angle, "Gains", actuator.config.camControllerGainKp, actuator.config.camControllerGainKd)
+                # dist_compensation = (actuator.data.disturbance_velocity / (1000*actuator.design_constants.ACTUATOR_RADIUS)) * (180 / math.pi)
+                print("Torque: ", actuator.data.actuator_torque, "Commanded: ", actuator.data.commanded_actuator_torque)
                 last_print_time = time_now  # Update the last controller update timestamp
 
             await actuator.read_data(loop_time=loop_time)
-            error_tracking += abs(actuator_controller.setpoint_value - actuator.data.cam_angle) if actuator_controller.setpoint_type==SetpointType.CAM_ANGLE else 0
+            # error_tracking += abs(actuator_controller.setpoint_value - actuator.data.cam_angle) if actuator_controller.setpoint_type==SetpointType.CAM_ANGLE else 0
             await actuator_controller.command()
             actuator.write_data()
-            if actuator_controller.setpoint_type == SetpointType.CAM_ANGLE and (actuator.data.cam_angle>68 or actuator.data.cam_angle<3): 
+            if actuator_controller.setpoint_type == SetpointType.CAM_ANGLE and (actuator.data.cam_angle>71 or actuator.data.cam_angle<2): 
                 await actuator.command_actuator_velocity(des_velocity=0)
                 break
 

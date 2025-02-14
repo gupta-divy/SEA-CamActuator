@@ -25,14 +25,14 @@ class moteusDataMap(Enum):
     CONTROLLER_CLOCK = 112
 
 class ControllerConfig:
-    control_loop_freq = 300             # hertz
-    camControllerGainKp = 120          
-    camControllerGainKd = 0.15           
+    control_loop_freq = 1000             # hertz
+    camControllerGainKp = 50          
+    camControllerGainKd = 0.2           
     calibrationVelocity = 60            # deg / sec
     calibrationTime = 5                 # sec
     calibrationCamThreshold = 5         # deg
     actuatorVelocitySaturation = 2000    # deg / sec
-    actuatorTorqueSaturation = 3        # Nm 
+    actuatorTorqueSaturation = 8        # Nm 
     homeAngleThreshold = 5
 
 class Constants:
@@ -56,7 +56,7 @@ class DesignConstants:
     ROLLER_C_INIT_ANG = 59
     CAM_RANGE = 75  
     INIT_CABLE_LEN_BW_ANKLE_ACT = 0.0945
-    CAM_DISENGAGE_FORCE_VAL = 8
+    CAM_DISENGAGE_FORCE_VAL = 6
 
 class SpringActuator_moteus:
 # ACTUATOR INITIALIZATION AND DATA FUNCTIONS
@@ -71,6 +71,7 @@ class SpringActuator_moteus:
         self.has_calibrated = False
         self.func_camAng_to_cableLen = np.poly1d(self.constants.CAM_ANG_TO_CABLE_LEN_POLYNOMIAL)
         self.func_camAng_to_cableLen_dot = np.polyder(self.func_camAng_to_cableLen)
+        self.cam_angle_filter = filters.Butterworth(N=2, Wn=98, fs=200) 
         self.dataFile_name = dataFile_name
         self.setup_data_writer(dataFile_name)
         self.motor_sign = 1                         # motor_serial to be used to update motor_sign if required
@@ -144,7 +145,7 @@ class SpringActuator_moteus:
             cam_angle_wrapped = self.data.cam_encoder_raw - 360.0
         else:
             cam_angle_wrapped = self.data.cam_encoder_raw
-        self.data.cam_angle = -1*(cam_angle_wrapped - self.cam_offset) if self.cam_offset != None else None
+        self.data.cam_angle = self.cam_angle_filter.filter(-1*(cam_angle_wrapped - self.cam_offset)) if self.cam_offset != None else None
         self.data.disturbance_velocity = self._disturbance_observer() if self.has_calibrated else 0
         self.data.exo_angle_estimate = None             # Need to define helper function for this
         self.data.exo_velocity_estimate = None          # Need to define helper function for this
@@ -192,6 +193,7 @@ class SpringActuator_moteus:
         '''
         # Velocity Saturation
         des_velocity = min(des_velocity, self.config.actuatorVelocitySaturation) if des_velocity>0 else max(des_velocity, -self.config.actuatorVelocitySaturation)
+        self.data.commanded_actuator_velocity = des_velocity
         desired_motor_vel = des_velocity / self.constants.MOTOR_POS_EST_TO_ACTUATOR_DEG
         await self.motor_ctrl.set_position(position=math.nan, velocity=desired_motor_vel)
     
@@ -201,8 +203,9 @@ class SpringActuator_moteus:
         '''
         # Torque Saturation
         des_torque = min(des_torque, self.config.actuatorTorqueSaturation)
+        self.data.commanded_actuator_torque = des_torque
         desired_motor_torque = des_torque / self.constants.MOTOR_TO_ACTUATOR_TR
-        await self.motor_ctrl.set_position(torque = desired_motor_torque)
+        await self.motor_ctrl.set_position(position=math.nan, kp_scale=0.0, kd_scale=0.0, feedforward_torque=desired_motor_torque)
 
     async def command_cam_angle(self, des_angle: float, error_filter: filters.Filter):  
         prev_cam_ang_err = self.data.cam_angle_error
@@ -212,6 +215,8 @@ class SpringActuator_moteus:
         curr_cam_ang_err_diff = (curr_cam_ang_err - prev_cam_ang_err) * self.config.control_loop_freq
         curr_cam_ang_err_diff = error_filter.filter(curr_cam_ang_err_diff)
         des_act_vel = self.config.camControllerGainKp * curr_cam_ang_err + self.config.camControllerGainKd * curr_cam_ang_err_diff
+        # dist_compensation = (self.data.disturbance_velocity / (1000*self.design_constants.ACTUATOR_RADIUS)) * (180 / math.pi)
+        # des_act_vel += 1 * dist_compensation
         self.data.cam_angle_error = curr_cam_ang_err
         await self.command_actuator_velocity(des_velocity=des_act_vel)
     
