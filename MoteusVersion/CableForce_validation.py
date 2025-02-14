@@ -31,17 +31,17 @@ async def main():
             loop_time = time_now - t0
 
             if(direction==1 and actuator.data.cam_angle<=65.0):
-                value = actuator.data.cam_angle + 1
+                value = actuator.data.cam_angle + 5
             else: direction = 0
 
             if(direction==0 and actuator.data.cam_angle>=5):
-                value = actuator.data.cam_angle - 1
+                value = actuator.data.cam_angle - 5
             
             if(actuator.data.cam_angle<=5.0):
                 value = actuator.data.cam_angle
                 break
 
-            if time_now - last_controller_update_time >= 4:
+            if time_now - last_controller_update_time >= 10:
                 actuator_controller.update_controller_variables(setpoint_type=SetpointType.CAM_ANGLE, setpoint_value=value)
                 last_controller_update_time = time_now  # Update the last controller update timestamp
 
@@ -49,7 +49,7 @@ async def main():
             await actuator_controller.command()
             actuator.write_data()
 
-            if actuator_controller.setpoint_type == SetpointType.CAM_ANGLE and (actuator.data.cam_angle>67 or actuator.data.cam_angle<4): 
+            if actuator_controller.setpoint_type == SetpointType.CAM_ANGLE and (actuator.data.cam_angle>68 or actuator.data.cam_angle<4): 
                 await actuator.command_actuator_velocity(des_velocity=0) 
                 break
 

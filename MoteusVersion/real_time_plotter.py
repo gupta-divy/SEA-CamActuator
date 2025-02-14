@@ -11,7 +11,7 @@ plt.ion()  # Turn on interactive mode
 
 # Define the time interval for plotting (in seconds)
 plot_interval = 0.01  # Plot every 10ms, equivalent to 100Hz plot rate
-columns_to_read = ["loop_time", "disturbance_velocity"]
+columns_to_read = ["loop_time", "cam_angle"]
 
 # Initialize the plot
 fig, ax = plt.subplots()
@@ -39,7 +39,7 @@ try:
                 
                 # Ensure the columns are numeric
                 df["loop_time"] = pd.to_numeric(df["loop_time"])
-                df["disturbance_velocity"] = pd.to_numeric(df["disturbance_velocity"])
+                df["cam_angle"] = pd.to_numeric(df["cam_angle"])
                 
                 # Get the current time (last timestamp in the data)
                 if not df.empty:
@@ -50,7 +50,7 @@ try:
                     
                     # Update the plot
                     line.set_xdata(filtered_df["loop_time"])
-                    line.set_ydata(filtered_df["disturbance_velocity"])
+                    line.set_ydata(filtered_df["cam_angle"])
                     ax.relim()
                     ax.autoscale_view()
                     plt.draw()

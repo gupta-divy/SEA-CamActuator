@@ -28,8 +28,8 @@ fig, ax1 = plt.subplots(figsize=(8, 5))
 
 # Plot cam_angle on the left y-axis
 # ax1.plot(df_filtered["loop_time"], df_filtered["cam_velocity"], linestyle="-", color="b", label="Cam Angle")
-
-ax1.plot(df_filtered["loop_time"], df_filtered["cam_velocity"],df_filtered["loop_time"], df_filtered["disturbance_velocity"], df_filtered["loop_time"], df_filtered["cam_angle"])
+# df_filtered["loop_time"], df_filtered["cam_velocity"],df_filtered["loop_time"], df_filtered["disturbance_velocity"]
+ax1.plot(df_filtered["loop_time"], df_filtered["cam_angle"],df_filtered["loop_time"], df_filtered["cam_velocity"],df_filtered["loop_time"], df_filtered["disturbance_velocity"])
 ax1.set_xlabel("Loop Time (s)")
 ax1.set_ylabel("Cam Angle", color="b")
 ax1.tick_params(axis='y', labelcolor="b")
