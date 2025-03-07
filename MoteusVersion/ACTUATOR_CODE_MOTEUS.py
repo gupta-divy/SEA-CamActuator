@@ -16,22 +16,30 @@ class moteusDataMap(Enum):
     POSITION = 1
     VELOCITY = 2
     TORQUE = 3
-    POWER = 7
+    CURRENT = 4
+    POWER = 7 
     VOLTAGE = 13
     TEMPERATURE = 14
     FAULT = 15
+    VFOC_VOLTAGE = 25
+    COMMAND_VELOCITY = 33
     ENC2_POSITION = 84
     ENC2_VELOCITY = 85
     CONTROLLER_CLOCK = 112
 
 class ControllerConfig:
-    control_loop_freq = 1000             # hertz
+    control_loop_freq = 300             # hertz
     camControllerGainKp = 180          
-    camControllerGainKd = 0.15           
+    camControllerGainKd = 0.2
+    feedforward_force = 0 
+    disturbance_rejector_gain = 1
+    kp_scale=4
+    kd_scale=3
+    ilimit_scale=2
     calibrationVelocity = 60            # deg / sec
     calibrationTime = 5                 # sec
     calibrationCamThreshold = 5         # deg
-    actuatorVelocitySaturation = 2000    # deg / sec
+    actuatorVelocitySaturation = 4000    # deg / sec
     actuatorTorqueSaturation = 8        # Nm 
     homeAngleThreshold = 5
 
@@ -71,7 +79,11 @@ class SpringActuator_moteus:
         self.has_calibrated = False
         self.func_camAng_to_cableLen = np.poly1d(self.constants.CAM_ANG_TO_CABLE_LEN_POLYNOMIAL)
         self.func_camAng_to_cableLen_dot = np.polyder(self.func_camAng_to_cableLen)
-        self.cam_angle_filter = filters.Butterworth(N=2, Wn=98, fs=200) 
+        self.func_camAng_to_cableLen_ddot = np.polyder(self.func_camAng_to_cableLen_dot)
+        self.cam_angle_filter = filters.Butterworth(N=2, Wn=98, fs=self.config.control_loop_freq) 
+        self.dist_velocity_filter = filters.Butterworth(N=4, Wn=10, fs=self.config.control_loop_freq)
+        self.dist_velocity_filter_2 = filters.Butterworth(N=2, Wn=40, fs=self.config.control_loop_freq)
+        self.dist_acceleration_filter = filters.Butterworth(N=2, Wn=10, fs=self.config.control_loop_freq)
         self.dataFile_name = dataFile_name
         self.setup_data_writer(dataFile_name)
         self.motor_sign = 1                         # motor_serial to be used to update motor_sign if required
@@ -87,6 +99,7 @@ class SpringActuator_moteus:
         mc_temperature: int = 0
         mc_fault: int = 0
         mc_mode: int = 0 
+        mc_current: int = 0
         actuator_angle: float = 0
         actuator_velocity: float = 0
         actuator_torque: float = 0
@@ -97,13 +110,20 @@ class SpringActuator_moteus:
         commanded_actuator_velocity: float = None
         commanded_actuator_torque: float = None
         commanded_cam_angle: float = None
-        disturbance_velocity: float = None
+        disturbance_velocity: float = 0
+        disturbance_velocity_measured: float = None
+        disturbance_displacement: float = 0
+        measured_force: float = None
+        mc_foc_voltage: float = None
+        mc_command_velocity: float = None
         # Extra logged values for use with Exoskeleton
         exo_angle_estimate: float = None
         exo_velocity_estimate: float = None
         exo_torque_estimate: float = None
         commanded_exo_torque: float = None
-
+        disturbance_acceleration: float = 0
+        disturbance_compensation: float = 0
+        disturbance_compensation_2: float = 0
         # Extra logged values for Debug
         cam_angle_error: float = 0              
         cam_angle_error_integral: float = None
@@ -121,13 +141,20 @@ class SpringActuator_moteus:
                 moteus.Register.TEMPERATURE: moteusMp.INT8,
                 moteus.Register.VOLTAGE: moteusMp.INT8,
                 moteus.Register.POWER: moteusMp.INT32,
-                moteus.Register.MILLISECOND_COUNTER: moteusMp.INT16
+                moteus.Register.MILLISECOND_COUNTER: moteusMp.INT16,
+                moteus.Register.Q_CURRENT: moteusMp.F32,
+                moteus.Register.VFOC_VOLTAGE: moteusMp.F32,
+                moteus.Register.COMMAND_VELOCITY: moteus.F32
             }
+        last_loop_time = self.data.loop_time if self.data.loop_time!= None else None
+        last_actuator_vel = self.data.actuator_velocity
+        last_cam_vel = self.data.cam_velocity
         data_feed = await self.motor_ctrl.custom_query(to_query)
         mc_data = data_feed.values
-        self.data.loop_time = loop_time
+        self.data.loop_time = loop_time if loop_time!=None else self.data.loop_time
         self.data.mc_clock = mc_data[moteusDataMap.CONTROLLER_CLOCK.value]
         self.data.mc_input_voltage = mc_data[moteusDataMap.VOLTAGE.value]
+        self.data.mc_current = mc_data[moteusDataMap.CURRENT.value]
         self.data.mc_power = mc_data[moteusDataMap.POWER.value]
         self.data.mc_fault = mc_data[moteusDataMap.FAULT.value]
         self.data.mc_temperature = mc_data[moteusDataMap.TEMPERATURE.value]
@@ -135,7 +162,8 @@ class SpringActuator_moteus:
         self.data.actuator_angle = mc_data[moteusDataMap.POSITION.value] * self.constants.MOTOR_POS_EST_TO_ACTUATOR_DEG
         self.data.actuator_velocity = mc_data[moteusDataMap.VELOCITY.value] * self.constants.MOTOR_POS_EST_TO_ACTUATOR_DEG
         self.data.actuator_torque = mc_data[moteusDataMap.TORQUE.value] * self.constants.MOTOR_TO_ACTUATOR_TR
-        
+        self.data.mc_command_velocity = mc_data[moteusDataMap.COMMAND_VELOCITY.value]
+        self.data.mc_foc_voltage = mc_data[moteusDataMap.VFOC_VOLTAGE.value]
         # CAM Angle
         self.data.cam_velocity = -1*mc_data[moteusDataMap.ENC2_VELOCITY.value] * self.constants.CAM_ENC_TO_DEG
         last_cam_encoder_raw = self.data.cam_encoder_raw if self.data.cam_encoder_raw is not None else None
@@ -146,7 +174,13 @@ class SpringActuator_moteus:
         else:
             cam_angle_wrapped = self.data.cam_encoder_raw
         self.data.cam_angle = self.cam_angle_filter.filter(-1*(cam_angle_wrapped - self.cam_offset)) if self.cam_offset != None else None
+        last_dist_vel = self.data.disturbance_velocity
         self.data.disturbance_velocity = self._disturbance_observer() if self.has_calibrated else 0
+        if last_loop_time!= None:
+            disturbance_acceleration = (self.data.disturbance_velocity - last_dist_vel)
+            self.data.disturbance_acceleration = self.dist_acceleration_filter.filter(disturbance_acceleration)
+            self.data.disturbance_compensation_2 = self._disturbance_estimation(act_vel_prev_deg=last_actuator_vel,cam_vel_prev_deg=last_cam_vel, t_prev=last_loop_time)
+        self.data.disturbance_velocity_measured = None
         self.data.exo_angle_estimate = None             # Need to define helper function for this
         self.data.exo_velocity_estimate = None          # Need to define helper function for this
         self.data.exo_torque_estimate = None            # Need to define helper function for this
@@ -175,9 +209,12 @@ class SpringActuator_moteus:
 
 # COMMANDING CONTROLLER FUNCTIONS
     # TODO: Read usage modes on moteus to see Kp_scale and k_scale usecase for improved controller performance
-    def update_camController_gains(self, kp_gain = None, kd_gain = None):
+    def update_camController_gains(self, kp_gain = None, kd_gain = None, kp_scale = None, kd_scale = None, dist_gain = None):
         if kp_gain != None: self.config.camControllerGainKp = kp_gain
         if kd_gain != None: self.config.camControllerGainKd = kd_gain
+        if kp_scale != None: self.config.kp_scale = kp_scale
+        if kd_scale != None: self.config.kd_scale = kd_scale
+        if dist_gain != None: self.config.disturbance_rejector_gain = dist_gain
 
     async def command_relative_actuator_angle(self, des_rel_angle: float, reference_angle: float):
         '''
@@ -196,9 +233,9 @@ class SpringActuator_moteus:
         self.data.commanded_actuator_velocity = des_velocity
         desired_motor_vel = des_velocity / self.constants.MOTOR_POS_EST_TO_ACTUATOR_DEG
         if f_torque!=None:
-            await self.motor_ctrl.set_position(position=math.nan, velocity=desired_motor_vel, feedforward_torque = f_torque, kp_scale=4,kd_scale=3,ilimit_scale=2)
+            await self.motor_ctrl.set_position(position=math.nan, velocity=desired_motor_vel, feedforward_torque = f_torque, kp_scale=self.config.kp_scale,kd_scale=self.config.kd_scale,ilimit_scale=self.config.ilimit_scale)
         else:
-            await self.motor_ctrl.set_position(position=math.nan, velocity=desired_motor_vel, kp_scale=4,kd_scale=3,ilimit_scale=2)
+            await self.motor_ctrl.set_position(position=math.nan, velocity=desired_motor_vel, kp_scale=self.config.kp_scale,kd_scale=self.config.kd_scale,ilimit_scale=self.config.ilimit_scale)
     
     async def command_actuator_torque(self, des_torque: float):
         '''
@@ -211,16 +248,23 @@ class SpringActuator_moteus:
         await self.motor_ctrl.set_position(position=math.nan, kp_scale=0.0, kd_scale=0.0, feedforward_torque=desired_motor_torque)
 
     async def command_cam_angle(self, des_angle: float, error_filter: filters.Filter):  
+        des_act_vel = 0
+        self.data.commanded_cam_angle = des_angle
         prev_cam_ang_err = self.data.cam_angle_error
         if prev_cam_ang_err is None:
             prev_cam_ang_err = 0.0
         curr_cam_ang_err = des_angle - self.data.cam_angle
         curr_cam_ang_err_diff = (curr_cam_ang_err - prev_cam_ang_err) * self.config.control_loop_freq
         curr_cam_ang_err_diff = error_filter.filter(curr_cam_ang_err_diff)
+        if self.data.loop_time>2:
+            self.update_camController_gains(kp_gain=220, kd_gain=0.2)
         des_act_vel = self.config.camControllerGainKp * curr_cam_ang_err + self.config.camControllerGainKd * curr_cam_ang_err_diff
-        # dist_compensation = (self.data.disturbance_velocity / (1000*self.design_constants.ACTUATOR_RADIUS)) * (180 / math.pi)
-        # des_act_vel += 1 * dist_compensation
-        torque = (5 * self.design_constants.ACTUATOR_RADIUS) / self.constants.MOTOR_TO_ACTUATOR_TR if des_angle>20 else None
+        self.data.disturbance_compensation = self.data.disturbance_velocity+self.data.disturbance_acceleration
+        dist_compensation = ((self.data.disturbance_compensation) / (1000*self.design_constants.ACTUATOR_RADIUS)) * (180 / math.pi)
+        des_act_vel -= self.config.disturbance_rejector_gain * dist_compensation
+        torque = (self.config.feedforward_force * self.design_constants.ACTUATOR_RADIUS) / self.constants.MOTOR_TO_ACTUATOR_TR if self.config.feedforward_force!=0 else None
+        
+        # des_act_vel += self.config.disturbance_rejector_gain*self.data.actuator_velocity
         
         self.data.cam_angle_error = curr_cam_ang_err
         await self.command_actuator_velocity(des_velocity=des_act_vel, f_torque=torque)
@@ -277,7 +321,31 @@ class SpringActuator_moteus:
 
     def _disturbance_observer(self):
         disturbance_vel = -(self.func_camAng_to_cableLen_dot(self.data.cam_angle)*self.data.cam_velocity) - ((self.data.actuator_velocity*math.pi/180)*self.design_constants.ACTUATOR_RADIUS*1000)
+        disturbance_vel = self.dist_velocity_filter_2.filter(disturbance_vel)
         return disturbance_vel
+    
+    def _disturbance_estimation(self, act_vel_prev_deg, cam_vel_prev_deg, t_prev):
+        '''Disturbance estimation for disturbance velocity of the next time step, in mm/s'''
+        act_vel_prev = act_vel_prev_deg/180*math.pi*self.design_constants.ACTUATOR_RADIUS
+        cam_vel_prev = cam_vel_prev_deg/180*math.pi
+ 
+        act_vel_curr = self.data.actuator_velocity/180*math.pi*self.design_constants.ACTUATOR_RADIUS
+        cam_vel_curr = self.data.cam_velocity/180*math.pi
+        cam_ang_curr = self.data.cam_angle
+ 
+        # delta_t = self.data.loop_time - t_prev
+        delta_t = 1/self.config.control_loop_freq
+ 
+        act_acc_curr = (act_vel_curr - act_vel_prev)/delta_t
+        cam_acc_curr = (cam_vel_curr - cam_vel_prev)/delta_t
+ 
+        f_pp = self.func_camAng_to_cableLen_ddot(cam_ang_curr)/1000
+        f_p = self.func_camAng_to_cableLen_dot(cam_ang_curr)/1000
+ 
+        disturbance_acc_est = - (act_acc_curr + f_pp*math.pow(cam_vel_curr,2) + f_p*cam_acc_curr)
+        disturbance_vel_est = -act_vel_curr - f_p*cam_vel_curr + disturbance_acc_est*delta_t
+        self.dist_velocity_filter.filter(disturbance_vel_est)
+        return disturbance_vel_est*1000
 
 async def connect_to_actuator(dataFile_name: str):
     '''Connect to Actuator, instantiate Actuator object'''
