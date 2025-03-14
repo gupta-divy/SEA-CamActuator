@@ -39,25 +39,28 @@ async def main():
     # Prepare the controller
     await c.set_stop()
     to_query = {
-        moteus.Register.MODE: moteusMp.INT8,
-        moteus.Register.POSITION: moteusMp.F32,
-        moteus.Register.VELOCITY: moteusMp.F32,
-        moteus.Register.ENCODER_2_POSITION: moteusMp.F32,
-        moteus.Register.ENCODER_2_VELOCITY: moteusMp.F32,
-        moteus.Register.TORQUE: moteusMp.F32,
-        moteus.Register.FAULT: moteusMp.INT8,
-        moteus.Register.TEMPERATURE: moteusMp.INT8,
-        moteus.Register.VOLTAGE: moteusMp.INT8,
-        moteus.Register.POWER: moteusMp.INT32,
-        moteus.Register.MILLISECOND_COUNTER: moteusMp.INT16,
-        moteus.Register.COMMAND_POSITION: moteusMp.F32,
-    }
+                moteus.Register.MODE: moteusMp.INT8,
+                moteus.Register.POSITION: moteusMp.F32,
+                moteus.Register.VELOCITY: moteusMp.F32,
+                moteus.Register.ENCODER_2_POSITION: moteusMp.F32,
+                moteus.Register.ENCODER_2_VELOCITY: moteusMp.F32,
+                moteus.Register.TORQUE: moteusMp.F32,
+                moteus.Register.FAULT: moteusMp.INT8,
+                moteus.Register.TEMPERATURE: moteusMp.INT8,
+                moteus.Register.VOLTAGE: moteusMp.INT8,
+                moteus.Register.POWER: moteusMp.INT32,
+                moteus.Register.MILLISECOND_COUNTER: moteusMp.INT16,
+                moteus.Register.Q_CURRENT: moteusMp.F32,
+                moteus.Register.VFOC_VOLTAGE: moteusMp.F32,
+                moteus.Register.COMMAND_VELOCITY: moteus.F32,
+                moteus.Register.COMMAND_VELOCITY_LIMIT: moteus.INT16 
+            }
 
     while not stop_flag:
         try:
             # Send position command
             t0 = time.time()
-            await c.set_position(position=motor_position, query=False)
+            # await c.set_position(position=motor_position, query=False)
             t1 = time.time()
 
             # Query controller data
@@ -72,7 +75,7 @@ async def main():
 
 
             # Non-blocking sleep
-            await asyncio.sleep(0.05) 
+            await asyncio.sleep(0.1) 
 
         except Exception as e:
             print(f"An error occurred: {e}")

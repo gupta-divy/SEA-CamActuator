@@ -57,7 +57,7 @@ try:
                     plt.pause(plot_interval)
                     
         except Exception as e:
-            # print(f"Error reading file: {e}")
+            print(f"Error reading file: {e}")
             continue
 
         
