@@ -32,6 +32,7 @@ class CommandSetpoint(Controller):
         self.setpoint_value = 0
         self.reference_angle = 0
         self.tracking_status = False
+        self.counter = 0
 
     async def command(self, reset: bool = False) -> bool:
         """Issue a command to the actuator based on the current setpoint type."""
@@ -47,8 +48,14 @@ class CommandSetpoint(Controller):
                     cam_angle = self.actuator._force_to_CAM_angle(self.setpoint_value)
                     await self.actuator.command_cam_angle(cam_angle)
                 else:
-                    torque = self.setpoint_value * self.actuator.design_constants.ACTUATOR_RADIUS
-                    await self.actuator.command_actuator_torque(torque)
+                    if self.actuator.data.cam_angle<60:
+                        'Transition Controller between low force regime and high force regime'
+                        vel_limiter = -300 + self.actuator.data.cam_angle*15
+                        await self.actuator.command_actuator_velocity(des_velocity = 1000 - vel_limiter)
+                    else:
+                        'When Switched to open loop torque control mode'
+                        torque = self.setpoint_value * self.actuator.design_constants.ACTUATOR_RADIUS
+                        await self.actuator.command_actuator_torque(torque)
 
             elif self.setpoint_type == SetpointType.HOME_POSITION:
                 await self.actuator.command_cam_angle(4.8, error_filter=self.butterfilter)
@@ -77,6 +84,7 @@ class CommandSetpoint(Controller):
         if self.check_input_safety(setpoint_type=setpoint_type, setpoint_val=setpoint_value):
             if setpoint_type != self.setpoint_type:
                 self.butterfilter.restart()
+            
             print(f"Updating Controller Variables: {setpoint_type} : {setpoint_value}")
             self.setpoint_type = setpoint_type
             self.setpoint_value = setpoint_value
@@ -87,11 +95,4 @@ class CommandSetpoint(Controller):
     
     def check_input_safety(self, setpoint_type: SetpointType, setpoint_val: float) -> bool:
         """Check if the given setpoint is safe to use."""
-        # if setpoint_type == SetpointType.ACTUATOR_TORQUE and abs(setpoint_val) > self.actuator.design_constants.MAX_TORQUE:
-        #     print("Warning: Torque exceeds safe limit!")
-        #     return False
-        # if setpoint_type == SetpointType.ACTUATOR_VELOCITY and abs(setpoint_val) > self.actuator.design_constants.MAX_VELOCITY:
-        #     print("Warning: Velocity exceeds safe limit!")
-        #     return False
-        # Add more checks as needed
         return True
