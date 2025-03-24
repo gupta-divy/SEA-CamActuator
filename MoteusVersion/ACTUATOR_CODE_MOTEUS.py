@@ -18,10 +18,10 @@ class ControllerConfig:
     Tunable Constants used for control loops
     '''
     control_loop_freq = 200             # hertz
-    camControllerGainKp = 150         
-    camControllerGainKd = 0.2
+    camControllerGainKp = 300 #300         
+    camControllerGainKd = 0.3 #1.5
     feedforward_force = 0 
-    disturbance_rejector_gain = 0.8
+    disturbance_rejector_gain = 0.6
     kp_scale=1
     kd_scale=2
     ilimit_scale=1
@@ -88,8 +88,8 @@ class SpringActuator_moteus:
         self.func_camAng_to_cableLen = np.poly1d(self.constants.CAM_ANG_TO_CABLE_LEN_POLYNOMIAL)
         self.func_camAng_to_cableLen_dot = np.polyder(self.func_camAng_to_cableLen)
         self.cam_angle_filter = filters.Butterworth(N=2, Wn=98, fs=self.config.control_loop_freq) 
-        self.dist_velocity_filter = filters.Butterworth(N=2, Wn=40, fs=self.config.control_loop_freq)
-        self.dist_acceleration_filter = filters.Butterworth(N=2, Wn=10, fs=self.config.control_loop_freq)
+        self.dist_velocity_filter = filters.Butterworth(N=2, Wn=98, fs=self.config.control_loop_freq)
+        self.dist_acceleration_filter = filters.Butterworth(N=2, Wn=50, fs=self.config.control_loop_freq)
         self.dataFile_name = dataFile_name
         self.setup_data_writer(dataFile_name)
         self.motor_sign = 1                         # motor_serial to be used to update motor_sign if required
@@ -168,7 +168,8 @@ class SpringActuator_moteus:
             cam_angle_wrapped = self.data.cam_encoder_raw - 360.0
         else:
             cam_angle_wrapped = self.data.cam_encoder_raw
-        self.data.cam_angle = self.cam_angle_filter.filter(-1*(cam_angle_wrapped - self.cam_offset)) if self.cam_offset != None else None
+        self.data.cam_angle = (-1*(cam_angle_wrapped - self.cam_offset)) if self.cam_offset != None else None
+        # self.data.cam_angle = self.cam_angle_filter.filter(-1*(cam_angle_wrapped - self.cam_offset)) if self.cam_offset != None else None
         
         self.data.disturbance_velocity = self._disturbance_observer() if self.has_calibrated else 0
         self.data.disturbance_acceleration = self.dist_acceleration_filter.filter(self.data.disturbance_velocity - last_dist_vel)
@@ -224,14 +225,14 @@ class SpringActuator_moteus:
         '''
         # Velocity Saturation
         des_velocity = min(des_velocity, self.config.actuatorVelocitySaturation) if des_velocity>0 else max(des_velocity, -self.config.actuatorVelocitySaturation)
-        self.data.commanded_actuator_velocity = des_velocity
-        desired_motor_vel = des_velocity / self.constants.MOTOR_POS_EST_TO_ACTUATOR_DEG
-        if abs(desired_motor_vel) < 200:
-            kd_scale = 0.5
+        if abs(des_velocity) < 20:
+            kd_scale = 1
             kp_scale = 0.5
         else:
             kd_scale = self.config.kd_scale
             kp_scale = self.config.kp_scale
+        self.data.commanded_actuator_velocity = des_velocity    
+        desired_motor_vel = des_velocity / self.constants.MOTOR_POS_EST_TO_ACTUATOR_DEG
         if f_torque!=None:
             await self.motor_ctrl.set_position(position=math.nan, velocity=desired_motor_vel, feedforward_torque = f_torque, kp_scale=kp_scale,kd_scale=kd_scale,ilimit_scale=self.config.ilimit_scale)
         else:
@@ -255,7 +256,8 @@ class SpringActuator_moteus:
         self.data.commanded_cam_angle = min(0,des_angle,self.design_constants.CAM_RANGE)
         prev_cam_ang_err = self.data.cam_angle_error
         curr_cam_ang_err = des_angle - self.data.cam_angle
-        curr_cam_ang_err_diff = error_filter.filter((curr_cam_ang_err - prev_cam_ang_err) * self.config.control_loop_freq)
+        curr_cam_ang_err_diff = (curr_cam_ang_err - prev_cam_ang_err) * self.config.control_loop_freq
+        # curr_cam_ang_err_diff = error_filter.filter((curr_cam_ang_err - prev_cam_ang_err) * self.config.control_loop_freq)
         des_act_vel = self.config.camControllerGainKp * curr_cam_ang_err + self.config.camControllerGainKd * curr_cam_ang_err_diff
         disturbance_vel_n = self.data.disturbance_velocity + self.data.disturbance_acceleration
         dist_compensation = -1*self.config.disturbance_rejector_gain * (((disturbance_vel_n) / (1000*self.design_constants.ACTUATOR_RADIUS)) * (180 / math.pi))

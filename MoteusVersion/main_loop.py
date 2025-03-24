@@ -83,13 +83,13 @@ async def main():
             break
 
     if quit_event.is_set():
-        actuator.update_camController_gains(kp_gain=50 ,kd_gain=0.2)
+        actuator.update_camController_gains(kp_gain=10 ,kd_gain=0.1)
         actuator_controller.update_controller_variables(setpoint_type=SetpointType.HOME_POSITION, setpoint_value=0)
         while True:
             await actuator.read_data()
             home_point_reached = await actuator_controller.command()
             if(home_point_reached): break
-            print("Commanding home position...")
+            # print("Commanding home position...")
             await asyncio.sleep(target_period)
         print("I'm Home, Now Exiting Gracefully")
         print(error_tracking)
