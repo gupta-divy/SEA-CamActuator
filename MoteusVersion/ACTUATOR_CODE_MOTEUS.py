@@ -21,10 +21,10 @@ class ControllerConfig:
     camControllerGainKp = 150         
     camControllerGainKd = 0.2
     feedforward_force = 0 
-    disturbance_rejector_gain = 0.6
+    disturbance_rejector_gain = 0.8
     kp_scale=1
-    kd_scale=6
-    ilimit_scale=2
+    kd_scale=2
+    ilimit_scale=1
     calibrationVelocity = 60            # deg / sec
     calibrationTime = 5                 # sec
     calibrationCamThreshold = 5         # deg
@@ -101,7 +101,6 @@ class SpringActuator_moteus:
         loop_time: float = None
         mc_input_voltage: float = 0
         mc_power: float = 0
-        mc_clock: int = 0
         mc_temperature: int = 0
         mc_fault: int = 0
         mc_mode: int = 0 
@@ -150,7 +149,6 @@ class SpringActuator_moteus:
         data_feed = await self.motor_ctrl.custom_query(to_query)
         mc_data = data_feed.values
         self.data.loop_time = loop_time if loop_time!=None else self.data.loop_time
-        self.data.mc_clock = mc_data[moteusDataMap.CONTROLLER_CLOCK.value]
         self.data.mc_input_voltage = mc_data[moteusDataMap.VOLTAGE.value]
         self.data.mc_current = mc_data[moteusDataMap.CURRENT.value]
         self.data.mc_power = mc_data[moteusDataMap.POWER.value]
@@ -228,10 +226,16 @@ class SpringActuator_moteus:
         des_velocity = min(des_velocity, self.config.actuatorVelocitySaturation) if des_velocity>0 else max(des_velocity, -self.config.actuatorVelocitySaturation)
         self.data.commanded_actuator_velocity = des_velocity
         desired_motor_vel = des_velocity / self.constants.MOTOR_POS_EST_TO_ACTUATOR_DEG
-        if f_torque!=None:
-            await self.motor_ctrl.set_position(position=math.nan, velocity=desired_motor_vel, feedforward_torque = f_torque, kp_scale=self.config.kp_scale,kd_scale=self.config.kd_scale,ilimit_scale=self.config.ilimit_scale)
+        if abs(desired_motor_vel) < 200:
+            kd_scale = 0.5
+            kp_scale = 0.5
         else:
-            await self.motor_ctrl.set_position(position=math.nan, velocity=desired_motor_vel, kp_scale=self.config.kp_scale,kd_scale=self.config.kd_scale,ilimit_scale=self.config.ilimit_scale)
+            kd_scale = self.config.kd_scale
+            kp_scale = self.config.kp_scale
+        if f_torque!=None:
+            await self.motor_ctrl.set_position(position=math.nan, velocity=desired_motor_vel, feedforward_torque = f_torque, kp_scale=kp_scale,kd_scale=kd_scale,ilimit_scale=self.config.ilimit_scale)
+        else:
+            await self.motor_ctrl.set_position(position=math.nan, velocity=desired_motor_vel, kp_scale=kp_scale,kd_scale=kd_scale,ilimit_scale=self.config.ilimit_scale)
     
     async def command_actuator_torque(self, des_torque: float):
         '''
@@ -256,7 +260,8 @@ class SpringActuator_moteus:
         disturbance_vel_n = self.data.disturbance_velocity + self.data.disturbance_acceleration
         dist_compensation = -1*self.config.disturbance_rejector_gain * (((disturbance_vel_n) / (1000*self.design_constants.ACTUATOR_RADIUS)) * (180 / math.pi))
         des_act_vel += dist_compensation
-        feedforward_torque = (self.config.feedforward_force * self.design_constants.ACTUATOR_RADIUS) / self.constants.MOTOR_TO_ACTUATOR_TR if self.config.feedforward_force!=0 else None
+        feedforward_torque = (self.config.
+                              feedforward_force * self.design_constants.ACTUATOR_RADIUS) / self.constants.MOTOR_TO_ACTUATOR_TR if self.config.feedforward_force!=0 else None
         self.data.cam_angle_error = curr_cam_ang_err
         await self.command_actuator_velocity(des_velocity=des_act_vel, f_torque=feedforward_torque)
           
@@ -301,6 +306,9 @@ class SpringActuator_moteus:
             
             print(f"CAM Angle: {self.data.cam_angle}, CAM Offset: {self.cam_offset}, Actuator Offset: {self.actuator_offset}")
             print('Finished Calibrating')
+
+        except Exception as err:
+            print(err)
 
         finally:
             await self.command_controller_off()
