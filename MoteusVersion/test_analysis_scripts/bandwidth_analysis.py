@@ -19,13 +19,13 @@ def generate_test_frequencies():
     # Combine and ensure uniqueness
     return np.unique(np.concatenate([low_range, res_range, high_range]))
 
-test_freq = generate_test_frequencies()
+test_freq = np.linspace(0.25,11,44)
 amplitude = 10
 duration = 5
 bias = 20
 init_time = 5
 sampling_freq = 200
-csv_file = r"exo_data\20250331_1411_bandwidthTest.csv"
+csv_file = r"exo_data\20250404_1119_bandwidthTest.csv"
 
 
 def segment_data(df):
@@ -66,14 +66,14 @@ def draw_bode(bode_data):
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
     
     # Magnitude plot (top)
-    ax1.semilogx(freqs, mags, 'bo-', linewidth=2, markersize=8)
+    ax1.plot(freqs, mags, 'bo-', linewidth=2, markersize=8)
     ax1.set_title('Bode Plot', fontsize=14)
     ax1.set_ylabel('Magnitude (dB)', fontsize=12)
     ax1.grid(True, which='both', linestyle='--', alpha=0.6)
     ax1.set_xlim([0.1,11.5])
     
     # Phase plot (bottom)
-    ax2.semilogx(freqs, phases, 'ro-', linewidth=2, markersize=8)
+    ax2.plot(freqs, phases, 'ro-', linewidth=2, markersize=8)
     ax2.set_ylabel('Phase (deg)', fontsize=12)
     ax2.set_xlabel('Frequency (Hz)', fontsize=12)
     ax2.axhline(y=-180, color='r', linestyle='--', linewidth=1.5)

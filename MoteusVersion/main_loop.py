@@ -13,7 +13,7 @@ async def main():
     datafile_name = "test0"
     actuator = await ACTUATOR_CODE_MOTEUS.connect_to_actuator(dataFile_name=datafile_name)
     # input("Press Enter to Start")
-    await actuator.initial_calibration()
+    # await actuator.initial_calibration()
     print('Start!')
 
     # Setup controller

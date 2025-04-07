@@ -25,13 +25,14 @@ def generate_test_frequencies():
     return np.unique(np.concatenate([low_range, res_range, high_range]))
 
 
-TEST_FREQ = generate_test_frequencies()
+# TEST_FREQ = generate_test_frequencies()
+TEST_FREQ  = np.linspace(0.25,11,44)
 
-def signal_generator(t, test_freq=TEST_FREQ, dur = 5, ampl=10):
+def signal_generator(t, test_freq=TEST_FREQ, dur = 5, ampl=16):
     if((t//dur)%2==1): return 0
     else:
         test_freq_idx = (t//(2*dur)) 
-        if((t%dur)>dur-0.01): print("Test frequency:", TEST_FREQ[int(test_freq_idx)])
+        if((t%dur)>dur-0.006): print("Test frequency:", TEST_FREQ[int(test_freq_idx)])
         use_t = t%dur
         if test_freq_idx>=len(test_freq): return None
         return ampl*math.sin(2*math.pi*TEST_FREQ[int(test_freq_idx)]*use_t)
@@ -72,15 +73,8 @@ async def main():
             await actuator_controller.command()
             actuator.write_data()
 
-            # safety exit
-            # if actuator_controller.setpoint_type == SetpointType.CAM_ANGLE and (actuator.data.cam_angle>71 or actuator.data.cam_angle<-3):
-            #     print("Going out of bounds") 
-            #     await actuator.command_actuator_velocity(des_velocity=0)
-            #     break
-
         except KeyboardInterrupt:
             print('Ctrl-C detected')
-            
             break
 
         except Exception as err:
