@@ -1,3 +1,8 @@
+x = [10, 15, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130]
+y = [10, 10, 8.68, 6.95, 5.00, 4.15, 3.61, 3.24, 2.87, 2.41, 2.15, 1.84, 1.83, 1.48]
+
+
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt

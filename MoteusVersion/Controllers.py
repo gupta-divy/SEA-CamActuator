@@ -27,7 +27,7 @@ class Controller(object):
 class CommandSetpoint(Controller):
     def __init__(self, actuator: SpringActuator_moteus):
         super().__init__(actuator)
-        self.butterfilter = filters.Butterworth(N=2, Wn=20, fs=200)
+        self.butterfilter = filters.Butterworth(N=2, Wn=98, fs=actuator.config.control_loop_freq)
         self.setpoint_type = SetpointType.NONE
         self.setpoint_value = 0
         self.reference_angle = 0
@@ -85,7 +85,7 @@ class CommandSetpoint(Controller):
             if setpoint_type != self.setpoint_type:
                 self.butterfilter.restart()
             
-            print(f"Updating Controller Variables: {setpoint_type} : {setpoint_value}")
+
             self.setpoint_type = setpoint_type
             self.setpoint_value = setpoint_value
             self.reference_angle = self.actuator.data.actuator_angle
