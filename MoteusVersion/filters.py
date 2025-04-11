@@ -58,9 +58,13 @@ class MovingAverage(Filter):
     '''Implements a real-time moving average filter.'''
 
     def __init__(self, window_size):
+        self.window_size = window_size
         self.deque = collections.deque([], maxlen=window_size)
 
     def filter(self, new_val):
         # TODO: Optimize for efficiency if window size is large
         self.deque.append(new_val)
         return np.mean(self.deque)
+    
+    def restart(self):
+        self.__init__(window_size=self.window_size) 

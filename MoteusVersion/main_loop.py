@@ -12,8 +12,9 @@ import math
 async def main():
     datafile_name = "test0"
     actuator = await ACTUATOR_CODE_MOTEUS.connect_to_actuator(dataFile_name=datafile_name)
-    # input("Press Enter to Start")
-    # await actuator.initial_calibration()
+    # input("Press Enter to Start")c20
+
+    await actuator.initial_calibration()
     print('Start!')
 
     # Setup controller
@@ -63,15 +64,16 @@ async def main():
             await actuator.read_data(loop_time=loop_time)
             await actuator_controller.command()
             actuator.write_data()
-            if actuator_controller.setpoint_type == SetpointType.CAM_ANGLE and (actuator.data.cam_angle>71 or actuator.data.cam_angle<2): 
-                await actuator.command_actuator_velocity(des_velocity=0)
-                break
             
-            # data print setup at ~2Hz
-            if time_now - last_print_time >= 0.5:
-                print("Velocity: ", actuator.data.actuator_velocity, "Cam Angle: ", actuator.data.cam_angle, "Gains", actuator.config.camControllerGainKp, actuator.config.camControllerGainKd)
+            #safety check
+            if abs(actuator.data.actuator_torque)>actuator.config.actuatorTorqueSaturation and actuator_controller.setpoint_type != SetpointType.CAM_ANGLE: await actuator.command_controller_off()
+            
+            # data print setup at ~1Hz
+            if time_now - last_print_time >= 1:
+                # print("Velocity: ", actuator.data.actuator_velocity, "Cam Angle: ", actuator.data.cam_angle, "Gains", actuator.config.camControllerGainKp, actuator.config.camControllerGainKd)
                 print("Torque: ", actuator.data.actuator_torque, "Commanded: ", actuator.data.commanded_actuator_torque)
                 last_print_time = time_now  # Update the last controller update timestamp
+
 
         except KeyboardInterrupt:
             print('Ctrl-C detected, Getting Actuator to Home Position')
