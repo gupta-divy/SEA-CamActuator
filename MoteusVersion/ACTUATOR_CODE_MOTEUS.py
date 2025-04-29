@@ -17,8 +17,8 @@ class ControllerConfig:
     '''
     control_loop_freq = 200             # hertz
     scaling_factor = 0.3543984634257938  # df(20) -1.60054871969536
-    camControllerGainKp = 250*scaling_factor           # 300         
-    camControllerGainKd = 0.24*scaling_factor          # 1.5
+    camControllerGainKp = 250*scaling_factor           # correspondes to 88.59961585644845       
+    camControllerGainKd = 0.24*scaling_factor          # correspondes to 0.08505563122219051
     feedforward_force = 0 
     disturbance_rejector_gain = 1
     kp_scale=1
@@ -266,6 +266,7 @@ class SpringActuator_moteus:
         prev_cam_ang_err = self.data.cam_angle_error
         curr_cam_ang_err = des_angle - self.data.cam_angle
         curr_cam_ang_err_diff = error_filter.filter((curr_cam_ang_err - prev_cam_ang_err) * self.config.control_loop_freq)
+        
         k = (-self.func_camAng_to_cableLen_dot(self.data.cam_angle)/(self.design_constants.ACTUATOR_RADIUS*1000 * math.pi / 180))
         des_act_vel = k* (self.config.camControllerGainKp * curr_cam_ang_err + self.config.camControllerGainKd * curr_cam_ang_err_diff)
         
