@@ -37,11 +37,11 @@ class CommandSetpoint(Controller):
         self.counter = 0
         self.switched = False
         self.transition_point = 0
-        self.torque_filter = filters.MovingAverage(20)
+        self.torque_filter = filters.PaddedMovingAverage(4)
 
-        switching_ang_pts = [69,70.5,71.8,72.25,73.5,74,75,75.75,76.5,78]
-        force_pts = [6,15,25,35,50,65,80,100,120,200]
-        self.pchip = PchipInterpolator(force_pts,switching_ang_pts)
+        # switching_ang_pts = [69,70,71.8,72.25,73.5,74,75,75.75,76.5,78]
+        # force_pts = [6,15,25,35,50,65,80,100,120,200]
+        # self.pchip = PchipInterpolator(force_pts,switching_ang_pts)
 
     async def command(self, reset: bool = False) -> bool:
         """Issue a command to the actuator based on the current setpoint type."""
@@ -59,8 +59,11 @@ class CommandSetpoint(Controller):
                     cam_angle = 20
                     await self.actuator.command_cam_angle(cam_angle, error_filter=self.butterfilter)
                 else:
+                    # torque = self.setpoint_value * self.actuator.design_constants.ACTUATOR_RADIUS
+                    # await self.actuator.command_actuator_torque(torque)
                     self.actuator.data.commanded_cable_force = self.setpoint_value
-                    switch_point = self.pchip(self.setpoint_value)
+                    # switch_point = self.pchip(self.setpoint_value)
+                    switch_point = 71
                     if self.actuator.data.cam_angle<switch_point and not self.switched:
                         'Transition Controller between low force regime and high force regime'
                         actuator_angle = (self.actuator.func_camAng_to_cableLen(self.transition_point)-self.actuator.func_camAng_to_cableLen(switch_point+2))/(self.actuator.design_constants.ACTUATOR_RADIUS*1000)

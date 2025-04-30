@@ -6,30 +6,61 @@ from Controllers import SetpointType
 import threading
 from keyboard_interrupt_parser import ParameterParser
 import asyncio
-from Phidget22.Phidget import *
-from Phidget22.Devices.VoltageRatioInput import *
+import nidaqmx
+from nidaqmx.constants import TerminalConfiguration
 
 FILENAME = "trans_test_amp20"
 
 # Load Cell Calibration Parameters (determined through calibration)
-CALIBRATION_FACTOR = -4611373.92760825
+CALIBRATION_FACTOR = 2375
 TARE_VALUE = None
 measured_force = None
-def onVoltageRatioChange(self,voltageRatio):
-    global TARE_VALUE
-    global measured_force
-    # Capture the first reading as the TARE value
-    if TARE_VALUE is None:
-        TARE_VALUE = voltageRatio
-        print(f"TARE Value Set: {TARE_VALUE:.6f}")
-    adjusted_ratio = voltageRatio - TARE_VALUE
-    measured_force = adjusted_ratio * CALIBRATION_FACTOR * 9.81 / 1000
+
+# Create a global task for the DAQ
+daq_task = None
+
+# Function to initialize the DAQ
+def initialize_daq():
+    global daq_task, TARE_VALUE
+    
+    # Create a new task for analog input
+    daq_task = nidaqmx.Task()
+    
+    # Configure AI0 channel in RSE (Referenced Single-Ended) mode
+    daq_task.ai_channels.add_ai_voltage_chan("Dev1/ai0", 
+                                          terminal_config=TerminalConfiguration.RSE,
+                                          min_val=-5.0, 
+                                          max_val=10.0)
+    
+    # Set the sample rate (similar to Phidget's data interval)
+    daq_task.timing.cfg_samp_clk_timing(rate=100)  # 100 Hz
+    
+    # Take initial reading for tare
+    TARE_VALUE = daq_task.read()
+    print(f"TARE Value Set: {TARE_VALUE:.6f}")
+
+# Function to read force from DAQ
+def read_force():
+    global daq_task, measured_force
+    
+    if daq_task is not None:
+        try:
+            # Read voltage from DAQ
+            voltage_ratio = daq_task.read()
+            
+            # Calculate force using the same calibration approach
+            adjusted_ratio = voltage_ratio
+
+            measured_force = (adjusted_ratio * CALIBRATION_FACTOR + 2) * 9.81 / 1000
+            
+        except Exception as e:
+            print(f"Error reading DAQ: {e}")
 
 # Main Moteus Controller Code
-async def main(voltageRatioInput):
+async def main():
     datafile_name = FILENAME
     actuator = await ACTUATOR_CODE_MOTEUS.connect_to_actuator(dataFile_name=datafile_name)
-    await actuator.initial_calibration()
+    # await actuator.initial_calibration()
     print('Start!')
 
     # Setup controller
@@ -49,12 +80,19 @@ async def main(voltageRatioInput):
     t0 = time.perf_counter()
     last_actuation_time = t0
     last_print_time = t0
+    last_force_read_time = t0
 
     while True:
         try:
             while time.perf_counter() - last_actuation_time < target_period:
                 pass
             time_now = time.perf_counter()
+            
+            # Read force at regular intervals
+            # if time_now - last_force_read_time >= 0.005:  # Read at 100Hz
+            read_force()
+                # last_force_read_time = time_now
+                
             with lock:
                 if new_setpoint_event.is_set():
                     print(f"Updating controller: type={keyboard_thread.setpoint_type}, value={keyboard_thread.setpoint_val}")
@@ -80,10 +118,10 @@ async def main(voltageRatioInput):
             await actuator_controller.command()
             if time_now - last_print_time >= 1:
                 # print("Velocity: ", actuator.data.actuator_velocity, "Cam Angle: ", actuator.data.cam_angle, "Gains", actuator.config.camControllerGainKp, actuator.config.camControllerGainKd)
-                print("Torque: ", actuator.data.actuator_torque, "Commanded: ", actuator.data.commanded_actuator_torque, "Cam Angle: ", actuator.data.cam_angle)
+                print("Torque: ", actuator.data.actuator_torque, "Commanded: ", actuator.data.commanded_actuator_torque, "Cam Angle: ", actuator.data.cam_angle, "Force: ", measured_force)
                 last_print_time = time_now
             actuator.write_data()
-            if measured_force is not None and measured_force>50: quit_event.set()
+            if measured_force is not None and measured_force > 200: quit_event.set()
 
         except KeyboardInterrupt:
             print('Ctrl-C detected, Just Quitting')
@@ -109,20 +147,24 @@ async def main(voltageRatioInput):
         quit_event.clear()
 
     await actuator.close()
-    voltageRatioInput.close()
+    if daq_task is not None:
+        daq_task.close()
     print('Done')
 
 if __name__ == "__main__":
     try:
-        voltageRatioInput = VoltageRatioInput()
-        voltageRatioInput.setOnVoltageRatioChangeHandler(onVoltageRatioChange)
-        # Open Phidget and wait for attachment
-        voltageRatioInput.openWaitForAttachment(1000)
-        voltageRatioInput.setDataInterval(10)
-        asyncio.run(main(voltageRatioInput=voltageRatioInput))
+        # Initialize DAQ instead of Phidget
+        initialize_daq()
+        
+        # Run the main async function
+        asyncio.run(main())
 
     except KeyboardInterrupt:
         print("Program interrupted.")
+        if daq_task is not None:
+            daq_task.close()
 
     except Exception as e:
         print(f"Unexpected error: {e}")
+        if daq_task is not None:
+            daq_task.close()

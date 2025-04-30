@@ -16,8 +16,8 @@ class ControllerConfig:
     Tunable Constants used for control loops
     '''
     control_loop_freq = 200             # hertz
-    camControllerGainKp = 250           # 300         
-    camControllerGainKd = 0.24          # 1.5
+    camControllerGainKp = 250         
+    camControllerGainKd = 0.24 
     feedforward_force = 0 
     disturbance_rejector_gain = 1
     kp_scale=1
@@ -38,7 +38,8 @@ class Constants:
     MOTOR_TO_ACTUATOR_TR = 8
     MOTOR_POS_EST_TO_ACTUATOR_DEG = 360 / MOTOR_TO_ACTUATOR_TR  # Deg / Revolution / Transmission ratio
     CAM_ENC_TO_DEG = 360                                        # Deg / Revolution
-    CAM_ANG_TO_CABLE_LEN_POLYNOMIAL = [6.239043371086961e-08, -7.799365622162653e-06, 0.00038192703646943165, -0.011057441844762825, -1.4114122691159243, 153.73206761490567]
+    CAM_ANG_TO_CABLE_LEN_POLYNOMIAL = [-1.58431437e-12, 4.34233905e-10, -4.74033359e-08, 2.67675145e-06, -8.37020178e-05, 1.46224327e-03, -1.66912552e-02, -1.41612564e+00, 1.53916188e+02]
+    CAM_ANG_TO_CABLE_LEN_POLYNOMIAL_DOT = [-2.50135485e-15, -8.66575879e-12,  2.06894486e-09, -1.83708046e-07, 7.95250499e-06, -1.75882870e-04,  1.95926578e-03, -1.64926789e-02, -1.45312981e+00]
     SPLINE_A_PTS_FORCE_ANGLE_CONVERSION = [0,10,20,40,70,80,85]
     SPLINE_F_PTS_FORCE_ANGLE_CONVERSION = [2.15,2.2,2.275,2.4,6.5,9.5,11]
 
@@ -89,7 +90,7 @@ class SpringActuator_moteus:
         self.cam_offset = None                      # post-calibration zero reference cam angle
         self.has_calibrated = False
         self.func_camAng_to_cableLen = np.poly1d(self.constants.CAM_ANG_TO_CABLE_LEN_POLYNOMIAL)
-        self.func_camAng_to_cableLen_dot = np.polyder(self.func_camAng_to_cableLen)
+        self.func_camAng_to_cableLen_dot = np.poly1d(self.constants.CAM_ANG_TO_CABLE_LEN_POLYNOMIAL_DOT)
         self.cam_angle_filter = filters.Butterworth(N=2, Wn=98, fs=self.config.control_loop_freq) 
         self.dist_velocity_filter = filters.Butterworth(N=2, Wn=98, fs=self.config.control_loop_freq)
         self.dist_acceleration_filter = filters.Butterworth(N=2, Wn=50, fs=self.config.control_loop_freq)
