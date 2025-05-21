@@ -60,7 +60,7 @@ def read_force():
 async def main():
     datafile_name = FILENAME
     actuator = await ACTUATOR_CODE_MOTEUS.connect_to_actuator(dataFile_name=datafile_name)
-    # await actuator.initial_calibration()
+    await actuator.initial_calibration()
     print('Start!')
 
     # Setup controller

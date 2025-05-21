@@ -16,13 +16,13 @@ class ControllerConfig:
     Tunable Constants used for control loops
     '''
     control_loop_freq = 200             # hertz
-    camControllerGainKp = 250         
-    camControllerGainKd = 0.24 
+    camControllerGainKp = 50        
+    camControllerGainKd = 0 
     feedforward_force = 0 
-    disturbance_rejector_gain = 1
+    disturbance_rejector_gain = 0
     kp_scale=1
     kd_scale=2
-    ilimit=1
+    ilimit=0
     calibrationVelocity = 60            # deg / sec
     calibrationTime = 5                 # sec
     calibrationCamThreshold = 5         # deg

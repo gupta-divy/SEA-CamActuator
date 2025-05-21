@@ -51,7 +51,7 @@ async def main():
     
     # Create controllers with specific IDs and transports
     c1 = moteus.Controller(id=1, transport=transport1)
-    c2 = moteus.Controller(id=2, transport=transport2)
+    c2 = moteus.Controller(id=1, transport=transport2)
     
     print(f"Controller 1 (COM3): {c1}")
     print(f"Controller 2 (COM4): {c2}")

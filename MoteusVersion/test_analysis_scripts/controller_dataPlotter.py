@@ -15,7 +15,7 @@ custom_colors = {
 }
 # File path
 root_path = "C:\\Users\\divg2\\OneDrive\\Documents\\GitHub\\SEA-CamActuator\\MoteusVersion\\"
-file_name = r"exo_data\20250428_1246_no_mechanism_high_slack.csv" 
+file_name = r"exo_data\20250418_1653_distTest_amp25.csv" 
 csv_file = root_path + file_name
 
 # Parameters
@@ -30,10 +30,10 @@ if end_time is None:
 df_filtered = df[(df["loop_time"] >= start_time) & (df["loop_time"] <= end_time)].copy()
 
 # Handle repeated-value fill (after interpolation)
-for col in ["measured_disturbance_velocity", "measured_disturbance_displacement"]:
-    repeated = df_filtered[col] == df_filtered[col].shift(1)
-    df_filtered.loc[repeated & repeated.shift(1, fill_value=False), col] = np.nan
-    df_filtered.loc[:, col] = df_filtered[col].interpolate(method='linear')
+# for col in ["measured_disturbance_velocity", "measured_disturbance_displacement"]:
+#     repeated = df_filtered[col] == df_filtered[col].shift(1)
+#     df_filtered.loc[repeated & repeated.shift(1, fill_value=False), col] = np.nan
+#     df_filtered.loc[:, col] = df_filtered[col].interpolate(method='linear')
 
 
 # # Create new time grid: 1000 Hz
@@ -51,14 +51,17 @@ for col in ["measured_disturbance_velocity", "measured_disturbance_displacement"
 
 # # Filter data based on time range
 r = 20
-# first_data = r * np.sin((df_filtered["measured_disturbance_displacement"] * 2 * np.pi)-np.pi/2) + r
-# first_data = df_filtered["cam_angle"]
-# second_data = r*2*np.pi*df_filtered["measured_disturbance_velocity"]*np.sin((df_filtered["measured_disturbance_displacement"] * 2 * np.pi))
-# error_data = first_data - second_data
-first_data = df_filtered["actuator_torque"]/0.0325
-second_data = df_filtered["commanded_actuator_torque"]/0.0325
-third_data  = df_filtered["measured_force"]-2
-
+first_data = r * np.sin((df_filtered["measured_disturbance_displacement"] * 2 * np.pi)-np.pi/2) + r
+first_data = df_filtered["disturbance_velocity"]
+second_data = r*2*np.pi*df_filtered["measured_disturbance_velocity"]*np.sin((df_filtered["measured_disturbance_displacement"] * 2 * np.pi))
+error_data = first_data - second_data
+# first_data = df_filtered["actuator_torque"]/0.0325
+# second_data = df_filtered["commanded_actuator_torque"]/0.0325
+# third_data  = df_filtered["measured_force"]+0.2
+# cam_angle = df_filtered["cam_angle"]
+# plt.plot(cam_angle,third_data)
+# plt.xlim((0,72))
+# plt.ylim((0,8))
 # print(np.mean(error_data), np.median(error_data)) 
 
 # first_data = (df_filtered["mc_command_velocity"]/8)*360
@@ -82,7 +85,8 @@ third_data  = df_filtered["measured_force"]-2
 x_data = df_filtered["loop_time"] - df_filtered["loop_time"].iloc[0]  # Reset to start at 0
 y1_data = first_data
 y2_data = second_data
-y3_data = third_data
+# y3_data = third_data
+
 
 x_label = "Loop Time (s)"
 y_label_l = "Cam Angle (degrees)"
@@ -95,8 +99,8 @@ y3_label = "Error"
 
 line_styles = {'y1': '-', 'y2': ':', 'y3': '-'}
 
-y1_limits = (0, 200)
-y3_limits = (0, 200)
+# y1_limits = (0, 200)
+# y3_limits = (0, 200)
 x_limits = (0, 9.5)
 fig_size = (3.2, 1.8)
 
@@ -122,11 +126,11 @@ fig, ax1 = plt.subplots(figsize=fig_size)
 
 # # ===== RIGHT AXIS =====
 ax2 = ax1.twinx()  # This correctly creates the second axis
-ax2.plot(x_data, y3_data, color=custom_colors["light_gray"], linestyle=line_styles['y3'], label=y3_label)
+ax2.plot(x_data, y1_data, color=custom_colors["light_gray"], linestyle=line_styles['y3'], label=y3_label)
 # ax2.plot(x_data, fourth_data)
 ax2.tick_params(axis='y', labelcolor=custom_colors["medium_gray"], pad=0.5)
 ax2.set_ylabel(y_label_r, fontweight='normal')
-ax2.set_ylim(y3_limits)
+# ax2.set_ylim(y3_limits)
 for label in ax2.get_yticklabels():
     label.set_rotation(45)
     label.set_verticalalignment('baseline')  # Align upward
@@ -134,7 +138,7 @@ for label in ax2.get_yticklabels():
 ax2.yaxis.set_label_coords(1.14, 0.5)  # Position right y-label
 
 # ===== LEFT AXIS =====
-ax1.plot(x_data, y1_data, color=custom_colors["orange"], linestyle=line_styles['y1'], label=y1_label)
+# ax1.plot(x_data, y1_data, color=custom_colors["orange"], linestyle=line_styles['y1'], label=y1_label)
 ax1.plot(x_data, y2_data, color=custom_colors["darker_red"], linestyle=line_styles['y2'], label=y2_label)
 # ax1.plot(x_data, y3_data, color=custom_colors["medium_gray"], linestyle=line_styles['y3'], label=y3_label)
 ax1.set_xlabel(x_label, fontweight='normal', labelpad=1)  # Reduced label padding
@@ -142,7 +146,7 @@ ax1.set_xlabel(x_label, fontweight='normal', labelpad=1)  # Reduced label paddin
 # ax1.axhline(y=35,color=custom_colors["orange"], linestyle='--')
 ax1.set_ylabel(y_label_l, fontweight='normal')
 ax1.tick_params(axis='y',pad=0.5, labelcolor=custom_colors["orange"])
-ax1.set_ylim(y1_limits)
+# ax1.set_ylim(y1_limits)
 # ax1.set_xlim(x_limits)
 ax1.grid(True, linestyle=':', linewidth=0.3, alpha=0.5)
 from matplotlib.ticker import MultipleLocator
