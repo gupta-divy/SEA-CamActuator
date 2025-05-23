@@ -71,7 +71,13 @@ async def main():
             # data print setup at ~1Hz
             if time_now - last_print_time >= 1:
                 # print("Velocity: ", actuator.data.actuator_velocity, "Cam Angle: ", actuator.data.cam_angle, "Gains", actuator.config.camControllerGainKp, actuator.config.camControllerGainKd)
-                print("Torque: ", actuator.data.actuator_torque, "Commanded: ", actuator.data.commanded_actuator_torque)
+                # print("Torque: ", actuator.data.actuator_torque, "Commanded: ", actuator.data.commanded_actuator_torque)
+                print("Cam Angle: ", actuator.data.cam_angle, "Commanded: ", actuator.data.commanded_cam_angle)
+                # print("Force: ", actuator.data.measured_force, "Commanded: ", actuator.data.commanded_cable_force)
+                # print("Actuator Angle: ", actuator.data.actuator_angle-actuator.actuator_offset)
+                print("Disturbance Position: ", actuator.data.disturbance_displacement, 
+                      "Commanded: ", actuator.data.commanded_cable_length)
+                # print("actuator velocity: ", actuator.data.actuator_velocity, "Commanded: ", actuator.data.commanded_actuator_velocity)
                 last_print_time = time_now  # Update the last controller update timestamp
 
 

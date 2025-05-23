@@ -83,6 +83,9 @@ class ParameterParser(threading.Thread):
                     elif f_word == 'h':
                         self.setpoint_type = SetpointType.HOME_POSITION
                         self.setpoint_val = 0.0
+                    elif f_word == 'g':
+                        self.setpoint_type = SetpointType.GANTRY
+                        self.setpoint_val = value
                     else:
                         print("Invalid command. Please try again.")
                         continue

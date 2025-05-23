@@ -118,7 +118,10 @@ async def main():
             await actuator_controller.command()
             if time_now - last_print_time >= 1:
                 # print("Velocity: ", actuator.data.actuator_velocity, "Cam Angle: ", actuator.data.cam_angle, "Gains", actuator.config.camControllerGainKp, actuator.config.camControllerGainKd)
-                print("Torque: ", actuator.data.actuator_torque, "Commanded: ", actuator.data.commanded_actuator_torque, "Cam Angle: ", actuator.data.cam_angle, "Force: ", measured_force)
+                print("Torque: ", actuator.data.actuator_torque, 
+                      "Commanded: ", actuator.data.commanded_actuator_torque, 
+                      "Cam Angle: ", actuator.data.cam_angle, 
+                      "Force: ", measured_force)
                 last_print_time = time_now
             actuator.write_data()
             if measured_force is not None and measured_force > 200: quit_event.set()

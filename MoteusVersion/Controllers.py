@@ -12,6 +12,7 @@ class SetpointType(Enum):
     ACTUATOR_TORQUE = 5
     HOME_POSITION = 6
     CABLE_FORCE = 7
+    GANTRY = 8
 
 class Controller(object):
     """Parent controller object. Child classes inherit methods."""
@@ -92,6 +93,14 @@ class CommandSetpoint(Controller):
 
             elif self.setpoint_type == SetpointType.NONE:
                 await self.actuator.command_relative_actuator_angle(0, self.actuator.data.actuator_angle)
+
+            elif self.setpoint_type == SetpointType.GANTRY:
+                stop_distance = max(20, min(600, self.setpoint_value))
+                self.actuator.data.commanded_cable_length = stop_distance
+                if self.actuator.data.disturbance_displacement > stop_distance:
+                    await self.actuator.command_actuator_velocity(0)
+                else:
+                    await self.actuator.command_cam_angle(20, error_filter=self.butterfilter)
 
             else:
                 raise ValueError(f"Unsupported setpoint type: {self.setpoint_type}")

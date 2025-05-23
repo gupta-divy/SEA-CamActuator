@@ -37,7 +37,7 @@ duration = 5
 bias = 20
 init_time = 5
 sampling_freq = 200
-csv_file = r"exo_data\20250417_1648_bandwidthTest.csv"
+csv_file = r"exo_data\BandwidthAnalysis.csv"
 
 
 def segment_data(df):
@@ -131,10 +131,10 @@ def draw_bode(bode_data):
 
     plt.tight_layout()
 
-    plt.savefig('plots/bode_plot.pdf', 
-           dpi=300, 
-           bbox_inches='tight',
-           pad_inches=0.03)  # Ultra-tight padding
+    # plt.savefig('plots/bode_plot.pdf', 
+    #        dpi=300, 
+    #        bbox_inches='tight',
+    #        pad_inches=0.03)  # Ultra-tight padding
     plt.show()
 
 if __name__ == "__main__":
