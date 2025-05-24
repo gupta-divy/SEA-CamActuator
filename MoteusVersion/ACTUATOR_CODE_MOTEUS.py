@@ -16,8 +16,9 @@ class ControllerConfig:
     Tunable Constants used for control loops
     '''
     control_loop_freq = 200             # hertz
-    camControllerGainKp = 50        
-    camControllerGainKd = 0 
+    scaling_factor = 0.3543984634257938  # df(20) -1.60054871969536
+    camControllerGainKp = 250*scaling_factor           # correspondes to 88.59961585644845       
+    camControllerGainKd = 0.24*scaling_factor          # correspondes to 0.08505563122219051
     feedforward_force = 0 
     disturbance_rejector_gain = 0
     kp_scale=1
@@ -88,6 +89,7 @@ class SpringActuator_moteus:
         self.config = ControllerConfig()
         self.actuator_offset = None                 # post-calibration zero reference actuator angle
         self.cam_offset = None                      # post-calibration zero reference cam angle
+        self.cam_calibrate_offset = None
         self.has_calibrated = False
         self.func_camAng_to_cableLen = np.poly1d(self.constants.CAM_ANG_TO_CABLE_LEN_POLYNOMIAL)
         self.func_camAng_to_cableLen_dot = np.poly1d(self.constants.CAM_ANG_TO_CABLE_LEN_POLYNOMIAL_DOT)
@@ -120,6 +122,8 @@ class SpringActuator_moteus:
         commanded_actuator_torque: float = None
         commanded_cable_force: float = None
         commanded_cam_angle: float = None
+        commanded_cable_length: float = None
+        disturbance_displacement: float = 0
         disturbance_velocity: float = 0
         disturbance_acceleration: float = 0
         cam_angle_error: float = 0
@@ -184,12 +188,16 @@ class SpringActuator_moteus:
             cam_angle_wrapped = self.data.cam_encoder_raw
         self.data.cam_angle = (-1*(cam_angle_wrapped - self.cam_offset)) if self.cam_offset != None else None
         self.data.cam_angle = self.cam_angle_filter.filter(-1*(cam_angle_wrapped - self.cam_offset)) if self.cam_offset != None else None
+        
+        self.data.disturbance_displacement = self._disturbance_observer_displacement() if self.has_calibrated else None
         self.data.disturbance_velocity = self._disturbance_observer() if self.has_calibrated else 0
         self.data.disturbance_acceleration = self.dist_acceleration_filter.filter(self.data.disturbance_velocity - last_dist_vel)
         self.data.commanded_actuator_torque = None
         self.data.commanded_actuator_angle = None
         self.data.commanded_actuator_velocity = None
-        self.data.commanded_cam_angle = None
+        self.data.commanded_cam_angle = None      
+        
+
         
     def write_data(self):
         '''Writes data file, only if new data packet is available'''
@@ -264,7 +272,10 @@ class SpringActuator_moteus:
         prev_cam_ang_err = self.data.cam_angle_error
         curr_cam_ang_err = des_angle - self.data.cam_angle
         curr_cam_ang_err_diff = error_filter.filter((curr_cam_ang_err - prev_cam_ang_err) * self.config.control_loop_freq)
-        des_act_vel = self.config.camControllerGainKp * curr_cam_ang_err + self.config.camControllerGainKd * curr_cam_ang_err_diff
+        
+        k = (-self.func_camAng_to_cableLen_dot(self.data.cam_angle)/(self.design_constants.ACTUATOR_RADIUS*1000 * math.pi / 180))
+        des_act_vel = k* (self.config.camControllerGainKp * curr_cam_ang_err + self.config.camControllerGainKd * curr_cam_ang_err_diff)
+        
         disturbance_vel = self.data.disturbance_velocity + self.data.disturbance_acceleration
         dist_compensation = -1*self.config.disturbance_rejector_gain * (((disturbance_vel) / (1000*self.design_constants.ACTUATOR_RADIUS)) * (180 / math.pi))
         des_act_vel += dist_compensation
@@ -301,12 +312,16 @@ class SpringActuator_moteus:
                 await self.read_data()
                 await self.command_actuator_velocity(self.motor_sign * self.config.calibrationVelocity)
                 if self.data.cam_angle > self.config.calibrationCamThreshold:
-                    self.actuator_offset = self.data.actuator_angle
-                    self.has_calibrated = True
+                    # self.actuator_offset = self.data.actuator_angle
+                    # self.has_calibrated = True
                     break
                 time.sleep(1/self.config.control_loop_freq)
             
             await self.command_actuator_velocity(0)
+            self.actuator_offset = self.data.actuator_angle 
+            self.cam_calibrate_offset = self.data.cam_angle  
+            self.has_calibrated = True         
+            
 
             if not self.has_calibrated:
                 raise RuntimeError('Calibration Timed Out!')
@@ -315,7 +330,7 @@ class SpringActuator_moteus:
             print('Finished Calibrating')
 
         except Exception as err:
-            raise RuntimeError("Calibration Failed")
+            raise RuntimeError(err)
 
         finally:
             await self.command_controller_off()
@@ -333,6 +348,15 @@ class SpringActuator_moteus:
         disturbance_vel = -(self.func_camAng_to_cableLen_dot(self.data.cam_angle)*self.data.cam_velocity) - ((self.data.actuator_velocity*math.pi/180)*self.design_constants.ACTUATOR_RADIUS*1000)
         disturbance_vel = self.dist_velocity_filter.filter(disturbance_vel)
         return disturbance_vel
+    
+    def _disturbance_observer_displacement(self):
+        ang = self.data.actuator_angle-self.actuator_offset
+        offset_length = 0
+        disturbance_pos = (self.func_camAng_to_cableLen(self.cam_calibrate_offset) 
+                                         - self.func_camAng_to_cableLen(self.data.cam_angle)
+                                         - self.design_constants.ACTUATOR_RADIUS * 1000 * ang * math.pi / 180
+                                         + offset_length)
+        return disturbance_pos
 
 async def connect_to_actuator(dataFile_name: str):
     '''Connect to Actuator, instantiate Actuator object'''
