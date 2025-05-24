@@ -1,6 +1,7 @@
 from scipy import signal
 import numpy as np
 import collections
+import queue
 
 
 class Filter(object):
@@ -58,9 +59,26 @@ class MovingAverage(Filter):
     '''Implements a real-time moving average filter.'''
 
     def __init__(self, window_size):
+        self.window_size = window_size
         self.deque = collections.deque([], maxlen=window_size)
 
     def filter(self, new_val):
         # TODO: Optimize for efficiency if window size is large
         self.deque.append(new_val)
         return np.mean(self.deque)
+    
+    def restart(self):
+        self.__init__(window_size=self.window_size) 
+
+class PaddedMovingAverage(Filter):
+    def __init__(self, window_size):
+        self.window_size = window_size
+        self.data_queue = [0.0] * window_size
+
+    def filter(self, new_val):
+        self.data_queue.pop(0) 
+        self.data_queue.append(new_val)
+        return np.mean(self.data_queue)
+
+    def restart(self):
+        self.data_queue = [0.0] * self.window_size
